@@ -50,32 +50,55 @@
 # 
 # ---
 # 
+# Installing and Setting Up fvcomersem-viz
+# ========================================
+#
 # Requirements (tested versions)
-# 
-#  Python ≥ 3.9 (3.11 recommended)
-#  Core stack: numpy, pandas, xarray, matplotlib, netCDF4, cftime, scipy
-#  Geospatial (for regional masks/overlays): geopandas, shapely, pyproj, rtree (optional but recommended)
-#  Performance (optional): dask[array]
-# 
-# 
-# This script assumes you have already installed the fvcomersem-viz package using pip and all its dependencies. If you haven't done this yet, follow the installation instructions below:
+# ------------------------------
+# Python ≥ 3.9  (3.11 recommended)
+# Core stack: numpy, pandas, xarray, matplotlib, netCDF4, cftime, scipy
+# Geospatial (for region masks/overlays): geopandas, shapely, pyproj, rtree (optional but recommended)
+# Performance (optional): dask[array]
+#
+# ------------------------------------------------------------
+# Installation Instructions
+# ------------------------------------------------------------
+#
+# 1. Create a clean environment with FVCOM-compatible libraries:
+#    conda create -n fviz python=3.11 geopandas shapely pyproj rtree -c conda-forge
+#    conda activate fviz
+#
+# 2. Install fvcomersem-viz from GitHub:
+#    pip install "git+https://github.com/mollyjames2/fvcomersem-viz.git"
+#
+#    # or, if you’ve cloned the repo locally (for development):
+#    git clone https://github.com/mollyjames2/fvcomersem-viz.git
+#    cd fvcomersem-viz
+#    pip install -e .    # editable/development mode
+#
+# 3. Verify installation:
+#    python -c "import fvcomersemviz; print(fvcomersemviz.__version__)"
+#
+# 4. (Optional) Run a basic functionality test:
+#    python tests/check_install.py
+#
+#    # This script checks that core dependencies, plotting modules,
+#    # and required imports load correctly in your environment.
+#
+# ------------------------------------------------------------
+# Notes
+# ------------------------------------------------------------
+# - The package depends on a working FVCOM or FVCOM–ERSEM model output dataset.
+# - If using regional masking or shapefile overlays, install the optional geospatial libs.
+# - Always activate your environment before running analysis scripts:
+#     conda activate fviz
+#
+#
+# After installation, you can run the examples under:
+#     https://github.com/mollyjames2/fvcomersem-viz/examples
 
-# Installation
-# 
-# Create a clean environment with FVCOM-compatible dependencies:
-# 
-# >```bash
-# >conda create -n fviz python=3.11 geopandas shapely pyproj rtree -c conda-forge
-# >conda activate fviz
-# >```
-# 
-#  If working locally, you can install in editable mode:
-# 
-# > ```bash
-# > pip install -e .
-# > ```
-# 
-# ---
+#-------------------------------------
+
 # 
 # Typical workflow used in this notebook
 # 
