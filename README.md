@@ -29,7 +29,7 @@ Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reprodu
 
 ```bash
 # create a clean env with geospatial stack
-conda create -n fviz python=3.11 geopandas shapely pyproj rtree -c conda-forge
+conda create -n fviz python=3.11 geopandas shapely pyproj rtree notebook -c conda-forge
 conda activate fviz
 
 # install the package
