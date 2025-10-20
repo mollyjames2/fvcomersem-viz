@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fvcomersemviz"
+version = "0.0.1"
+description = "Skeleton for FVCOM–ERSEM plotting package (function-first API, no CLI)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Your Name", email = "you@example.com" }]
+
+dependencies = [
+  "numpy>=1.23",
+  "pandas>=2.0",
+  "xarray>=2023.8.0",
+  "matplotlib>=3.7",
+  "cmocean>=3.0",
+  "scipy>=1.10",
+  "shapely>=2.0",
+  "pyproj>=3.5",
+  "geopandas>=0.14",
+  "cftime>=1.6",      
+  "netCDF4>=1.6.5",
+  "dask[array]>=2024.5.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
