@@ -23,6 +23,7 @@ dependencies = [
   "geopandas>=0.14",
   "cftime>=1.6",      
   "netCDF4>=1.6.5",
+  "notebook>=7.4.7",
   "dask[array]>=2024.5.0",
 ]
 

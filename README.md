@@ -9,6 +9,8 @@ Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reprodu
 * **Time-series** at domain / region / station scopes (surface, bottom, depth-avg, sigma, fixed-z).
 * **Plan-view maps** (full domain or polygon-masked regions).
 * **Hovmöller** (time × depth) in native σ or interpolated z.
+* **Composition** (time × depth) phyto and zoo - surface/bottom comparisons,
+  depth averged or specific depth.
 * **Curves (x–y diagnostics)** with binned median±IQR or raw scatter.
 * **Stoichiometry KDEs** (N:C & P:C vs variable) in a 2×2 panel.
 * **Animations** for time-series and maps.
@@ -19,7 +21,8 @@ Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reprodu
 ## Requirements
 
 * **Python** ≥ 3.9 (3.11 recommended)
-* Core: `numpy`, `pandas`, `xarray`, `matplotlib`, `netCDF4`, `cftime`, `scipy`
+* Core: `numpy`, `pandas`, `xarray`, `matplotlib`, `netCDF4`, `cftime`,
+  `scipy`, `notebook`
 * Geospatial (for region masks/overlays): `geopandas`, `shapely`, `pyproj`, `rtree` *(optional but recommended)*
 * Optional performance: `dask[array]`
 
@@ -89,7 +92,23 @@ fvcomersem-viz/
 │     ├─ kde_stoichiometry.py
 │     └─ animate.py
 ├─ examples/
+│  ├─ tutorial.py
+│  ├─ plot_timeseries.py
+│  ├─ plot_maps.py
+│  ├─ plot_kde.py
+│  ├─ plot_hovmoller.py
+│  ├─ plot_curves.py
+│  ├─ plot_composition.py
+│  └─ plot_animations.py
 ├─ notebooks/
+│  ├─ quickstart_tutorial.ipynb
+│  ├─ plot_timeseries.ipynb
+│  ├─ plot_maps.ipynb
+│  ├─ plot_kde.ipynb
+│  ├─ plot_hovmoller.ipynb
+│  ├─ plot_curves.ipynb
+│  ├─ plot_composition.ipynb
+│  └─ plot_animations.ipynb
 ├─ tests/
 │  └─ check_install.py
 ├─ LICENSE

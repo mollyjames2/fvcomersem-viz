@@ -25,7 +25,7 @@ from fvcomersemviz.plots.hovmoller import station_hovmoller
 # ---------------------------------------------------------------------
 BASE_DIR     = "/data/proteus1/scratch/yli/project/lake_erie/output_updated_river_var"
 FILE_PATTERN = "erie_00??.nc"
-FIG_DIR = "/data/proteus1/scratch/moja/projects/Lake_Erie/fvcomersem-viz/examples/plots/"
+FIG_DIR = "/data/proteus1/scratch/moja/projects/Lake_Erie/fviz-plots/"
 
 # ---------------------------------------------------------------------
 # Variable groups / composites (optional)
