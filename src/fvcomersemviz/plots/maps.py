@@ -158,7 +158,7 @@ def domain_map(
        d. Decide the time(s) to plot:
           - If `at_time`/`at_times` provided ? plot one PNG per chosen instant
             (selection via `_choose_instants(..., method=time_method)`).
-          - Else ? plot the mean over 'time' (if present).
+          - Else - plot the mean over 'time' (if present).
        e. Build color scaling:
           - If a `norm` is provided via `styles[var]["norm"]`, it takes priority.
           - Else use explicit vmin/vmax from `styles` (or `clim`), or compute robust
@@ -227,7 +227,7 @@ def domain_map(
     Notes
     -----
     - Plot center is inferred from data dims:
-        'node' ? node-centered plotting, 'nele' ? element-centered plotting.
+        'node' - node-centered plotting, 'nele' - element-centered plotting.
       Arrays lacking both dims are skipped.
     - If `ds` lacks 'nv', triangulation falls back to Delaunay using available coordinates.
     - Color scaling priority: `norm` > (vmin/vmax in styles) > `clim` > robust percentiles.
