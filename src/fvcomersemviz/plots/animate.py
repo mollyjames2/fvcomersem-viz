@@ -208,18 +208,93 @@ def animate_timeseries(
     verbose: bool = True,
 ) -> List[str]:
     """
-    Create growing-line time-series animations.
+    Create **growing-line animations** of time series for variables, scoped to the
+    domain, specific regions, or stations. Saves animated GIFs and returns their paths.
 
-    Frame selection:
-      - If `at_time` or `at_times` is provided, frames follow those instants (nearest match).
-      - Else if `frequency` is 'hourly' | 'daily' | 'monthly', frames are sampled at that cadence.
-      - Else, use every available timestep in the filtered window (default).
+    Frame selection
+    ---------------
+    The sequence of animation frames is chosen in this priority:
+    1) If `at_time`/`at_times` are provided ⇒ use those instants (matched via `time_method`).
+    2) Else if `frequency` in {'hourly','daily','monthly'} ⇒ sample one representative
+       timestep per period (nearest available).
+    3) Else ⇒ use **every** timestep in the filtered window.
 
-    combine_by:
-      - None        -> one animation per (scope item × variable)
-      - 'var'       -> one animation per scope item, overlay all variables
-      - 'region'    -> (scope='region') one animation per variable, overlay all regions
-      - 'station'   -> (scope='station') one animation per variable, overlay all stations
+    Combination modes (`combine_by`)
+    --------------------------------
+    - ``None``        : one animation per (scope item × variable).
+    - ``'var'``       : one animation per scope item; **multiple variables** as separate lines.
+    - ``'region'``    : (scope='region') one animation per variable; **lines = regions**.
+    - ``'station'``   : (scope='station') one animation per variable; **lines = stations**.
+
+    Workflow
+    --------
+    1. Filter dataset by depth (`select_depth`) and time (`filter_time`).
+    2. Resolve each variable using `eval_group_or_var`, also handling absolute-z depth via `_apply_depth`.
+    3. For each scope item:
+       - domain  → area-weighted mean via `_space_mean`.
+       - region  → build masks with `build_region_masks`, then area-weighted mean.
+       - station → nearest column (node/element) series.
+    4. Choose frame indices from available times (explicit instants, cadence, or all).
+    5. Build a Matplotlib `FuncAnimation` that progressively extends each line up to frame `k`.
+    6. Save to GIF (Pillow writer) using a filename that encodes scope, depth tag, time label,
+       frequency tag (if any), and combination mode.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset.
+    vars : sequence of str
+        Variable or expression names to animate (resolved via `groups` if provided).
+    groups : dict, optional
+        Global alias/composite expressions for variable resolution.
+    scope : {"domain","region","station"}
+        Which spatial scope to animate. For 'region'/'station', provide `regions`/`stations`.
+    regions : sequence of (str, dict), optional
+        Regions as `(name, spec)`; required when `scope="region"`.
+    stations : sequence of (str, float, float), optional
+        Stations as `(name, lat, lon)`; required when `scope="station"`.
+    months, years : int or sequence of int, optional
+        Calendar filters. Accept single ints or lists; internally normalized to lists.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    at_time : any, optional
+        A single desired timestamp (np.datetime64, pandas Timestamp, ISO string, etc.).
+    at_times : sequence, optional
+        Multiple desired timestamps.
+    time_method : {"nearest","pad","backfill"}, default "nearest"
+        Method for matching desired instants to available model times.
+    frequency : {"hourly","daily","monthly"} or None, optional
+        Periodic sampling for frames when explicit `at_time(s)` not given.
+    depth : Any, default "surface"
+        Depth selector passed to `select_depth`; absolute-z handled by `_apply_depth`.
+    base_dir : str, default ""
+        Run root used by `file_prefix(base_dir)` for filename stems.
+    figures_root : str, default ""
+        Output directory root; if empty, current working directory is used.
+    combine_by : {None,"var","region","station"}, optional
+        Controls how lines are grouped in a single animation (see above).
+    linewidth : float, default 1.8
+        Line width for plots.
+    figsize : (int, int), default (10, 4)
+        Figure size in inches.
+    dpi : int, default 150
+        Render resolution for saved GIFs.
+    styles : dict, optional
+        Per-series line style overrides (e.g., `styles["chl"]["line_color"] = "C3"`).
+    verbose : bool, default True
+        Print progress and skip reasons.
+
+    Returns
+    -------
+    list of str
+        Full filesystem paths to the saved GIFs.
+
+    Notes
+    -----
+    - Area-weighted means use `'art1'` if available and alignable; otherwise simple means.
+    - Y-limits are padded by 5% to reduce clipping when lines grow.
+    - File names encode scope, depth tag, time window label and, when applicable,
+      a frequency tag like `__FreqDaily`.
     """
 
 
@@ -570,20 +645,109 @@ def animate_maps(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
 ) -> List[str]:
-    """
-    Animate maps over time (domain or regions).
+"""
+    Animate **maps over time** for one or more variables on a triangular mesh,
+    at a selected depth and spatial scope (domain or regions). Saves animated GIFs
+    and returns their paths.
 
-    Frames:
-      - If `at_time` or `at_times` is given: use those instants (nearest-selected).
-      - Else if `frequency` is set to 'hourly' | 'daily' | 'monthly': sample one frame per period.
-      - Else: use every timestep in the filtered window.
+    Frames
+    ------
+    Priority for frame times (like `animate_timeseries`):
+      1) Explicit `at_time`/`at_times` matched via `time_method`.
+      2) If `frequency` is given ('hourly'|'daily'|'monthly'): sample one frame per period.
+      3) Otherwise: include every timestep in the time-filtered window.
 
-    Depth modes:
-      'surface' | 'bottom' | 'depth_avg' | ('sigma', k) | k (int) |
-      metres below surface (e.g., -10.0) | {'z_m': -10} | ('z_m', -10)
+    Depth modes
+    -----------
+    Accepts the same selectors as static maps, e.g.:
+      "surface" | "bottom" | "depth_avg" | sigma index | float sigma |
+      absolute meters below surface: -10.0 | {"z_m": -10} | ("z_m", -10).
 
-    Styling:
-      Per-variable overrides via styles[var]: 'cmap', 'norm', 'vmin', 'vmax', 'shading'.
+    Colour scaling (per variable)
+    -----------------------------
+    Priority: `styles[var]["norm"]` > (`styles[var]["vmin"]`,`styles[var]["vmax"]`)
+              > `clim` argument > **robust** percentiles (`robust_q`) computed
+              across the **masked values in the selected frames**.
+
+    Workflow
+    --------
+    1. Select depth (`select_depth`) and time window (`filter_time`) → `ds_t`.
+    2. Build a triangulation from `ds` with `build_triangulation(ds)`.
+    3. For each variable:
+       a. Resolve via `eval_group_or_var(ds_t, var, groups)`, then apply absolute-z
+          refinement if applicable.
+       b. Build the list of frames (explicit instants, cadence, or all).
+       c. For each scope item:
+          - domain → no mask.
+          - region → build masks via `build_region_masks`; mask values outside region.
+          Compute colour limits according to the priority above.
+       d. Create a `FuncAnimation` that re-draws `tripcolor` for each frame using
+          node- or element-centered values (element-centered forces `shading='flat'`).
+    4. Save GIF with a filename that encodes scope, var, depth tag, time label,
+       and frequency tag (if any).
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset with lon/lat and connectivity (`nv`) for triangulation.
+    variables : sequence of str
+        Variable/expression names to animate (resolved via `groups` if provided).
+    scope : {"domain","region"}, default "domain"
+        Spatial scope. For `"region"`, supply `regions`.
+    regions : sequence of (str, dict), optional
+        Regions as `(name, spec)`; required when `scope="region"`.
+    months, years : int or sequence of int, optional
+        Calendar-based time filters (normalized to lists).
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    at_time, at_times : optional
+        Explicit instants to show (see also `time_method`).
+    time_method : {"nearest","pad","backfill"}, default "nearest"
+        Method for matching requested instants to available model times.
+    frequency : {"hourly","daily","monthly"} or None, optional
+        If given and no explicit instants, sample one frame per period.
+    depth : Any, default "surface"
+        Depth selector for `select_depth`; absolute-z refinements are applied per variable.
+    base_dir : str, default ""
+        Run root used by `file_prefix(base_dir)` for filename stems.
+    figures_root : str, default ""
+        Output root directory; if empty, current working directory is used.
+    groups : dict, optional
+        Global alias/composite expressions for variable resolution.
+    cmap : str, default "viridis"
+        Default colormap (overridden by `styles[var]["cmap"]` if present).
+    clim : (float, float), optional
+        Global vmin/vmax (used if no per-variable vmin/vmax and no norm).
+    robust_q : (float, float), default (5, 95)
+        Percentiles for robust auto-scaling when limits are not explicit.
+    shading : {"flat","gouraud"}, default "gouraud"
+        Shading for node-centered `tripcolor`; element-centered values force `"flat"`.
+    grid_on : bool, default False
+        If True, overlay mesh edges for diagnostics.
+    figsize : (float, float), default (8, 6)
+        Figure size in inches.
+    dpi : int, default 150
+        Render resolution for saved GIFs.
+    interval_ms : int, default 100
+        Delay between frames used by `FuncAnimation` (milliseconds).
+    fps : int, default 10
+        Frame rate for writing GIFs with Pillow.
+    styles : dict, optional
+        Per-variable overrides: "cmap", "norm", "vmin", "vmax", "shading".
+    verbose : bool, default True
+        Print progress and skip reasons.
+
+    Returns
+    -------
+    list of str
+        Full filesystem paths to the saved GIFs.
+
+    Notes
+    -----
+    - Plot center is inferred from data dims: 'node' or 'nele'.
+    - Region masking uses node/element masks consistently with the data center.
+    - When computing robust limits, only **in-scope** (masked) values are used.
+    - File names encode scope, variable, depth tag, time label, and optional frequency tag.
     """
     # validate scope
     scope = scope.lower().strip()

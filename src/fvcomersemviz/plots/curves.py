@@ -157,18 +157,64 @@ def build_curve_data(
     verbose: bool = False,
 ) -> Dict[str, Any]:
     """
-    Resolve one curve described by `spec` into plottable arrays.
+    Resolve a single curve `spec` into plottable payloads for either a **binned curve**
+    (with optional IQR band) or **raw scatter**.
 
-    Spec fields:
-      name   : str (for legend)
-      x,y    : str — resolvable by eval_group_or_var (supports GROUPS & algebra)
-      filters: {months, years, start, end, where}
-      depth  : "surface"|"bottom"|"depth_avg"|float sigma|{"z_m":-10}
-      scope  : {"region": (name, spec)} | {"station": (name, lat, lon)} | {}
-      bin    : {"x_bins":40, "agg":"median"|"mean"|"pXX", "min_count":10, "iqr":True}
-      scatter: {"alpha":0.15, "s":4} (used if no "bin")
-      style  : matplotlib line/scatter kwargs
-      aliases: optional dict of per-spec name aliases, e.g. {"PAR":"light_parEIR"}
+    The function applies time filters, spatial scope, and depth selection as requested
+    in `spec`, evaluates x/y (supporting GROUPS and algebra), optionally applies a
+    boolean `where` predicate, aligns x–y on common indices, flattens to 1D arrays,
+    and returns a dict describing what to draw.
+
+    Spec schema (keys inside `spec`)
+    --------------------------------
+    name : str
+        Legend label for the curve.
+    x, y : str
+        Variable names or algebraic expressions resolvable by `eval_group_or_var`.
+        Tolerant to case/underscores and can use `groups` and per-spec `aliases`.
+    filters : dict, optional
+        Time/predicate filters: `{"months": [...], "years": [...],
+        "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "where": "<boolean expr>"}`.
+    depth : Any, optional
+        Depth selector passed to `select_depth`, e.g. "surface" | "bottom" | "depth_avg"
+        | float sigma | {"z_m": -10}.
+    scope : dict, optional
+        Choose exactly one or none:
+          `{"region": (name, spec)}` or `{"station": (name, lat, lon)}` or `{}` (=Domain).
+    bin : dict, optional
+        If present, build a **binned** curve:
+          `{"x_bins": 40, "agg": "median"|"mean"|"pXX", "min_count": 10, "iqr": True}`.
+        - `agg="pXX"` uses percentile XX for y (e.g., "p90").
+        - If `iqr=True`, returns y_lo/y_hi for the IQR band (25–75th).
+    scatter : dict, optional
+        Used only when `bin` is absent. Example: `{"alpha": 0.15, "s": 4}`.
+    style : dict, optional
+        Matplotlib keyword overrides for plotting (e.g., `{"color": "C3", "lw": 2}`).
+    aliases : dict, optional
+        Per-spec alias remaps for tolerant resolution, e.g. `{"PAR": "light_parEIR"}`.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset (unfiltered). All filtering/scoping/selection is performed inside.
+    spec : dict
+        Curve specification dictionary (see schema above).
+    groups : dict, optional
+        Global alias/composite expressions available to `eval_group_or_var`.
+    verbose : bool, default False
+        If True, logs tolerance/where errors and decisions.
+
+    Returns
+    -------
+    dict
+        Either:
+          - `{"kind": "binned", "data": {"x_mid", "y_val", "y_lo", "y_hi", ...}, "style": {...}}`
+          - `{"kind": "scatter", "data": {"x", "y", "s", "alpha"}, "style": {...}}`
+
+    Raises
+    ------
+    KeyError
+        If `x` or `y` cannot be resolved after applying filters/scope/depth.
     """
     # 1) time filter
     fil = spec.get("filters", {})
@@ -252,23 +298,75 @@ def plot_curves(
     constrained_layout: bool = True,
 ) -> str:
     """
-    Build a figure, render multiple curves (binned-with-IQR or scatter), and ALWAYS save a PNG.
+    Render one figure containing one or more **curves** (each defined by a `spec`):
+    either **binned trends** (median/mean/percentile with optional IQR shading)
+    or **raw scatter**. The figure is **always saved** to disk and the full path
+    is returned.
 
-    Saved path:
-        <FIG_DIR>/<basename(BASE_DIR)>/<subdir>/<prefix>__Curves__<ScopeTag>__<DepthTag>__<TimeLabel>__<Content>.png
+    Workflow
+    --------
+    1. For each spec, call `build_curve_data(...)` to obtain a plotting payload
+       (`"binned"` or `"scatter"`) and per-curve styles.
+    2. Draw binned curves (optionally fill IQR) or scatter clouds. Assign colors
+       from Matplotlib’s cycle unless overridden by spec styles.
+    3. Set axis labels from `xlabel`/`ylabel`, falling back to the first spec’s
+       `x_label`/`y_label` or `x`/`y`.
+    4. Place legend (outside by default).
+    5. Decide the output folder via `out_dir(...)`. If `FVCOM_PLOT_SUBDIR` is
+       *not* set, temporarily set it to `"curves"` to ensure consistent subfolders.
+    6. Build the filename stem:
+         - ScopeTag : "Domain" | "Region-<Name>" | "Station-<Name>" | "MultiScope"
+         - DepthTag : from `depth_tag(spec["depth"])`, or "AllDepth" if missing;
+                      "MixedDepth" if specs disagree
+         - TimeLabel: from `build_time_window_label(...)` in each spec's filters,
+                      or "MixedTime" if specs disagree
+         - Content  : "<X>_vs_<Y>" from the first spec, plus "Ncurves" if >1 spec
+       If `stem` is provided, this override is used as-is.
+    7. Save PNG and return the full path.
 
-    Subdir logic:
-        - If FVCOM_PLOT_SUBDIR is set (e.g., "project" or ""), it is respected.
-        - Otherwise defaults to "curves" so outputs go to ".../curves/".
+    Parameters
+    ----------
+    specs : sequence of dict
+        One spec per curve (see `build_curve_data` docstring for schema).
+    ds : xr.Dataset
+        Source dataset from which each spec’s x/y are resolved.
+    groups : dict, optional
+        Global alias/composite expressions used by spec x/y and `filters.where`.
+    xlabel, ylabel : str, optional
+        Axis labels. If omitted, derived from the first spec.
+    show_legend : bool, default True
+        Toggle legend visibility.
+    legend_outside : bool, default True
+        If True, place legend to the right outside the axes; else use `"best"`.
+    legend_fontsize : int, default 8
+        Legend text size.
+    verbose : bool, default False
+        If True, passes verbosity into underlying resolution steps.
+    base_dir : str
+        Run root; used by `file_prefix(base_dir)` to prefix filenames.
+    figures_root : str
+        Root directory for saving figures (subfolders created as needed).
+    stem : str, optional
+        Filename stem override. If `None`, an informative stem is auto-built.
+    dpi : int, default 150
+        PNG resolution.
+    figsize : (float, float), default (7.2, 4.6)
+        Figure size in inches.
+    constrained_layout : bool, default True
+        Use constrained layout in `plt.subplots`.
 
-    Stem auto-build (when `stem` is None):
-        - ScopeTag  : "Domain" | "Region-<Name>" | "Station-<Name>" | "MultiScope"
-        - DepthTag  : from utils.depth_tag(depth) per spec, or "AllDepth" if depth not specified; "MixedDepth" if specs differ
-        - TimeLabel : from utils.build_time_window_label(...) per spec; "MixedTime" if specs differ
-        - Content   : "<X>_vs_<Y>" (from first spec), plus "Ncurves" if more than one spec
+    Returns
+    -------
+    str
+        Full file path of the saved PNG:
+        ``<FIG_DIR>/<basename(BASE_DIR)>/<subdir>/<prefix>__Curves__<stem>.png``
 
-    Returns:
-        str : Full file path of the saved PNG.
+    Notes
+    -----
+    - Subdir behavior: respects `FVCOM_PLOT_SUBDIR` if already set; otherwise defaults
+      to `"curves"` *just for this call*.
+    - When multiple specs disagree on scope/depth/time, the stem encodes `"MultiScope"`,
+      `"MixedDepth"`, and/or `"MixedTime"` accordingly.
     """
     import os
     from ..utils import out_dir, file_prefix, build_time_window_label, depth_tag

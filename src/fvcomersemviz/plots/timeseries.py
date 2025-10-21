@@ -118,6 +118,64 @@ def domain_mean_timeseries(
     verbose: bool = True,
     combine_by: Optional[str] = None,   # NEW: None | "var"
 ) -> None:
+    """
+    Plot domain-mean time series for one or more variables, with optional depth selection
+    and time filtering. Writes one or multiple PNGs depending on `combine_by`.
+
+    Workflow
+    --------
+    1. Depth selection: `select_depth(ds, depth)` (supports sigma modes, depth_avg, and absolute z).
+    2. Time filter: `filter_time(...)` using months/years/date bounds.
+    3. For each `var`, resolve the expression via `eval_group_or_var(ds2, var, groups)`.
+       If an absolute depth was requested (e.g., {"z_m": -10}), slice DA with `select_da_by_z(...)`.
+    4. Compute spatial mean over domain using `_space_mean(da, ds, ...)`.
+    5. Save a figure either per variable (default) or a combined multi-line figure if `combine_by="var"`.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset containing model fields and grid info.
+    variables : list of str
+        Variable or expression names to plot. Each is resolved through `groups` if provided.
+    depth : Any
+        Depth selector passed to `select_depth`, e.g. "surface", "bottom", "depth_avg",
+        sigma value, or absolute depth forms like -10.0 / ("z_m", -10.0) / {"z_m": -10.0}.
+    months, years : list[int], optional
+        Calendar months (1–12) and/or years to keep.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    base_dir : str
+        Run root; used to derive filename prefix via `file_prefix(base_dir)`.
+    figures_root : str
+        Root folder for figure outputs (subdirs created as needed).
+    groups : dict, optional
+        Global alias / expression mapping for variable resolution.
+    linewidth : float, default 1.5
+        Line width for plotted series.
+    figsize : tuple, default (10, 4)
+        Figure size in inches.
+    dpi : int, default 150
+        Output PNG resolution.
+    styles : dict, optional
+        Optional style dictionary. For each key (var name), you may provide:
+        {"line_color": <matplotlib color>, "line_width": <float>, ...}.
+        Accessed via `style_get(var, styles, "line_color", None)`.
+    verbose : bool, default True
+        If True, prints progress and skip reasons.
+    combine_by : {None, "var"}, optional
+        - None: one PNG per variable (default).
+        - "var": one PNG with all variables as separate lines.
+
+    Returns
+    -------
+    None
+        Figures are saved to disk. Filenames include scope=Domain, depth tag, and time window.
+
+    Notes
+    -----
+    - Variables without a 'time' dimension are skipped.
+    - Absolute-depth slicing is applied per-variable after the time/depth-scope dataset is built.
+    """
     if combine_by not in (None, "var"):
         raise ValueError("domain_mean_timeseries: combine_by must be None or 'var'.")
 
@@ -205,6 +263,67 @@ def station_timeseries(
     verbose: bool = True,
     combine_by: Optional[str] = None,           # NEW: None | "var" | "station"
 ) -> None:
+    """
+    Plot station time series by sampling the nearest grid column at each station
+    (node or element), with optional depth selection and time filtering.
+
+    Workflow
+    --------
+    1. Depth selection and time filter on `ds` to obtain `ds2`.
+    2. For each station, find nearest indices for 'node' and/or 'nele' via `nearest_index_for_dim`.
+    3. For each variable, resolve through `eval_group_or_var(ds2, var, groups)`.
+       Subset to the station location (node or element). If absolute depth was requested,
+       apply `select_da_by_z` using the spatially-aligned subset of `ds2`.
+    4. Plot lines according to `combine_by` choice and save PNGs.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset.
+    variables : list of str
+        Variable or expression names to plot.
+    stations : list of (str, float, float)
+        Station definitions as (name, lat, lon). Nearest node/element is used.
+    depth : Any
+        Depth selector: "surface", "bottom", "depth_avg", sigma value, or absolute z forms.
+    months, years : list[int], optional
+        Time filters (calendar-based).
+    start_date, end_date : str, optional
+        Inclusive date bounds as "YYYY-MM-DD".
+    base_dir : str
+        Run root for filename prefixing.
+    figures_root : str
+        Root folder for outputs.
+    groups : dict, optional
+        Alias/expression map used by `eval_group_or_var`.
+    linewidth : float, default 1.5
+        Line width for plotting.
+    figsize : tuple, default (10, 4)
+        Figure size in inches.
+    dpi : int, default 150
+        PNG resolution.
+    styles : dict, optional
+        Optional style dict. Keys can be variable names (for `combine_by="var"`)
+        or station names (for `combine_by="station"`). Supports `"line_color"`.
+    verbose : bool, default True
+        Print progress and skipping reasons.
+    combine_by : {None, "var", "station"}, optional
+        Controls grouping of lines and files:
+        - None: one PNG per (station × variable).
+        - "var": one PNG per station; lines = variables.
+        - "station": one PNG per variable; lines = stations.
+
+    Returns
+    -------
+    None
+        Figures written to disk. Filenames encode station, depth, and time window.
+
+    Notes
+    -----
+    - If the DA lacks 'time', that series is skipped.
+    - Sparse grids may yield None for node/element indices; function uses whatever is available.
+    - Absolute-depth slicing occurs after spatial selection so depths align with the chosen column.
+    """
     if combine_by not in (None, "var", "station"):
         raise ValueError("station_timeseries: combine_by must be None, 'var', or 'station'.")
 
@@ -360,12 +479,61 @@ def region_timeseries(
     combine_by: Optional[str] = None,            # None | "var" | "region"
 ) -> None:
     """
-    Region-mean time series with optional depth selection and time filtering.
+    Plot region-mean time series using polygon masks (shapefile or CSV boundary),
+    with optional depth selection and time filtering.
 
-    combine_by:
-      - None     → one PNG per (region × variable)
-      - "var"    → one PNG per region, lines = variables
-      - "region" → one PNG per variable, lines = regions
+    For each region and variable, applies a spatial mask, computes area-weighted
+    (if possible) or simple spatial means per time step, and saves figures grouped
+    according to `combine_by`.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset. Must contain 'lon' and 'lat' for region masking.
+    variables : list of str
+        Variable or expression names to plot.
+    regions : list of (str, dict)
+        Regions as (region_name, spec). `spec` must define either:
+          - {"shapefile": <path>, "name_field": ..., "name_equals": ...} or
+          - {"csv_boundary": <path>, "lon_col": "lon", "lat_col": "lat"}
+    depth : Any
+        Depth selector ("surface", "bottom", "depth_avg", sigma, or absolute z).
+    months, years : list[int], optional
+        Time filters.
+    start_date, end_date : str, optional
+        Inclusive date bounds.
+    base_dir : str
+        Run root for filename prefixing.
+    figures_root : str
+        Output root directory.
+    groups : dict, optional
+        Alias/expression map used by `eval_group_or_var`.
+    linewidth : float, default 1.5
+        Line width for plotting.
+    figsize : tuple, default (10, 4)
+        Figure size in inches.
+    dpi : int, default 150
+        PNG resolution.
+    styles : dict, optional
+        Optional style dictionary. Keys can be variable names (for `combine_by="var"`)
+        or region names (for `combine_by="region"`), providing `"line_color"` etc.
+    verbose : bool, default True
+        Print progress, mask sizes, and skip reasons.
+    combine_by : {None, "var", "region"}, optional
+        - None: one PNG per (region × variable).
+        - "var": one PNG per region; lines = variables.
+        - "region": one PNG per variable; lines = regions.
+
+    Returns
+    -------
+    None
+        Figures saved to disk. Filenames encode region, depth, and time window.
+
+    Notes
+    -----
+    - Spatial means/std are area-weighted if `art1` is available and alignable; otherwise simple means.
+    - Absolute-depth slicing is applied after spatial masking to maintain vertical alignment.
+    - Regions yielding empty masks are skipped with a verbose message.
     """
     if combine_by not in (None, "var", "region"):
         raise ValueError("region_timeseries: combine_by must be None, 'var', or 'region'.")
@@ -529,6 +697,58 @@ def _plot_three_panel(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     dpi: int = 150, figsize: tuple = (11, 9),
 ) -> None:
+    """
+    Internal helper to render a 3-panel figure for a single variable:
+
+      Panel 1: Surface time series (mean ± 1σ)
+      Panel 2: Bottom  time series (mean ± 1σ)
+      Panel 3: Depth profile vs 'siglay' (mean ± 1σ across time & space)
+
+    Parameters
+    ----------
+    t : np.ndarray
+        1D array of time values suitable for matplotlib plotting (e.g., datetime64 converted).
+    surf_mean, bott_mean : np.ndarray
+        1D arrays of mean values per time step for surface and bottom.
+    surf_std, bott_std : np.ndarray
+        1D arrays of standard deviation (±1σ) per time step for surface and bottom.
+    zcoord : np.ndarray
+        Vertical coordinate (e.g., 'siglay') for the profile panel; increasing or decreasing.
+    prof_mean, prof_std : np.ndarray
+        1D arrays of mean and standard deviation along `zcoord` (aggregated across time & space).
+    title_prefix : str
+        Title prefix describing scope (e.g., "Domain", "Station X", "Region Y").
+    var : str
+        Variable name used for labeling, styling, and filename.
+    label : str
+        Time window label (e.g., "JJA 2018", "2018-04–2018-10").
+    outdir : str
+        Directory to save the PNG file.
+    prefix : str
+        Filename prefix derived from `file_prefix(base_dir)`.
+    styles : dict, optional
+        Per-variable style dict. Recognized keys:
+          - "line_color": color for lines
+          - "line_width": float
+          - "shade_alpha": float transparency for ±σ fill
+          - "shade_color": explicit shade color (otherwise a lightened line color is used)
+          - "shade_lighten": float in (0..1) controlling how much to lighten the line color
+    dpi : int, default 150
+        PNG resolution.
+    figsize : tuple, default (11, 9)
+        Figure size in inches.
+
+    Returns
+    -------
+    None
+        Saves a PNG named:
+        ``<prefix>__<title_prefix>__<var>__3Panel__<label>__Timeseries.png``
+
+    Notes
+    -----
+    - If `zcoord` appears decreasing (typical for sigma indices), the y-axis is inverted.
+    - Colors: if no explicit color provided, uses MPL cycle and derives a lighter shade for the σ band.
+    """
 
     def _lighter(c, amount: float = 0.6) -> str:
         """
@@ -603,9 +823,50 @@ def domain_three_panel(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,  
     dpi: int = 150, figsize: tuple = (11, 9), verbose: bool = False,
 ) -> None:
-    
+    """
+    Render 3-panel summaries for each variable at the domain scale:
 
-    """Three panels for each variable: Surface ts ±1σ, Bottom ts ±1σ, Depth profile mean ±1σ."""
+      (1) Surface time series (spatial mean ±1σ)
+      (2) Bottom  time series (spatial mean ±1σ)
+      (3) Depth profile vs 'siglay' (mean ±1σ across time & space)
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset.
+    variables : list of str
+        Variable or expression names to plot.
+    months, years : list[int], optional
+        Time filters.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    base_dir : str
+        Run root for filename prefixing.
+    figures_root : str
+        Output root directory.
+    groups : dict, optional
+        Alias/expression map for `eval_group_or_var`.
+    styles : dict, optional
+        Per-variable style overrides (see `_plot_three_panel` for keys).
+    dpi : int, default 150
+        PNG resolution.
+    figsize : tuple, default (11, 9)
+        Figure size for the 3-panel figure.
+    verbose : bool, default False
+        Print progress messages.
+
+    Returns
+    -------
+    None
+        One PNG per variable saved to disk. Filenames encode scope (Domain) and time label.
+
+    Notes
+    -----
+    - Surface/bottom time series are computed after `select_depth(ds_t, "surface"/"bottom")`.
+    - Spatial mean/std per time step use area weights (`art1`) if available and alignable.
+    - If a variable lacks 'siglay', a single-layer profile is plotted using surface stats.
+    """
+    
     ds_t = filter_time(ds, months, years, start_date, end_date)
     label = build_time_window_label(months, years, start_date, end_date)
     outdir = out_dir(base_dir, figures_root)
@@ -672,7 +933,54 @@ def station_three_panel(
     base_dir: str, figures_root: str, groups: Optional[Dict[str, Any]] = None, styles: Optional[Dict[str, Dict[str, Any]]] = None,
     dpi: int = 150, figsize: tuple = (11, 9), verbose: bool=False,
 ) -> None:
-    """Three panels per (station × variable). σ shading is temporal at stations (single node)."""
+    """
+    Render 3-panel summaries for each (station × variable):
+
+      (1) Surface time series (temporal mean ±1σ at the station column)
+      (2) Bottom  time series (temporal mean ±1σ at the station column)
+      (3) Depth profile vs 'siglay' (temporal mean ±1σ at the station column)
+
+    At a single station (nearest node/element), spatial variance collapses, so
+    the ±σ shading reflects **temporal** variability rather than spatial.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset.
+    variables : list of str
+        Variable or expression names to plot.
+    stations : list of (str, float, float)
+        (name, lat, lon); nearest node/element is used for sampling.
+    months, years : list[int], optional
+        Time filters.
+    start_date, end_date : str, optional
+        Date bounds "YYYY-MM-DD".
+    base_dir : str
+        Run root for filename prefixing.
+    figures_root : str
+        Output root directory.
+    groups : dict, optional
+        Alias/expression map for `eval_group_or_var`.
+    styles : dict, optional
+        Per-variable style overrides (see `_plot_three_panel`).
+    dpi : int, default 150
+        PNG resolution.
+    figsize : tuple, default (11, 9)
+        Figure size for the 3-panel figure.
+    verbose : bool, default False
+        Print progress messages.
+
+    Returns
+    -------
+    None
+        One PNG per (station × variable) saved to disk.
+
+    Notes
+    -----
+    - Surface/bottom arrays are subset to the nearest node/element before plotting.
+    - If the profile has 'siglay', profile stats are temporal means/std across time.
+      Otherwise a single-layer profile is synthesized from the surface series.
+    """
     if not stations:
         return
 
@@ -745,14 +1053,57 @@ def region_three_panel(
     dpi: int = 150, figsize: tuple = (11, 9), verbose: bool=False,
 ) -> None:
     """
-    Three panels per (region × variable):
-      1) Surface time series (spatial mean ±1σ)
-      2) Bottom time series  (spatial mean ±1σ)
-      3) Depth profile vs siglay (mean ±1σ across time & space)
+    Render 3-panel summaries for each (region × variable):
 
-    If 'art1' is available, spatial means/std are area-weighted; otherwise simple means.
-    The region is provided via shapefile or CSV boundary polygon.
+      (1) Surface time series (spatial mean ±1σ within region)
+      (2) Bottom  time series (spatial mean ±1σ within region)
+      (3) Depth profile vs 'siglay' (mean ±1σ across time & space within region)
+
+    Regions are defined by polygon masks from a shapefile or CSV boundary.
+    If `art1` is present and alignable, spatial means/std are area-weighted.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset. Must contain 'lon' and 'lat' for region masking.
+    variables : list of str
+        Variable or expression names to plot.
+    regions : list of (str, dict)
+        Regions as (region_name, spec). `spec` must include either:
+          - {"shapefile": <path>, "name_field": ..., "name_equals": ...}
+          - {"csv_boundary": <path>, "lon_col": "lon", "lat_col": "lat"}
+    months, years : list[int], optional
+        Time filters.
+    start_date, end_date : str, optional
+        Date bounds "YYYY-MM-DD".
+    base_dir : str
+        Run root for filename prefixing.
+    figures_root : str
+        Output root directory.
+    groups : dict, optional
+        Alias/expression map for `eval_group_or_var`.
+    styles : dict, optional
+        Per-variable style overrides (see `_plot_three_panel`).
+    dpi : int, default 150
+        PNG resolution.
+    figsize : tuple, default (11, 9)
+        Figure size for the 3-panel figure.
+    verbose : bool, default False
+        Print progress and mask summaries.
+
+    Returns
+    -------
+    None
+        One PNG per (region × variable) saved to disk.
+
+    Notes
+    -----
+    - Builds node mask from polygon; element mask optionally derived from connectivity.
+    - Weights (`art1`) are subset to the same nodes/elements before computing means/std.
+    - If the variable lacks 'siglay', a single-layer profile is plotted using temporal
+      surface stats over the region.
     """
+    
     # Helper: which dims are "space" for a given DataArray
     def space_dims(da: xr.DataArray) -> list[str]:
         return [d for d in da.dims if d not in ("time", "siglay")]

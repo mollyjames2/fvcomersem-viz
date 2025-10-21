@@ -119,15 +119,113 @@ def kde_stoichiometry_2x2(
     random_seed: Optional[int] = 12345,
 ) -> None:
     """
-    Build a 2×2 density figure:
-        [ surface N:C vs var | surface P:C vs var ]
-        [ bottom  N:C vs var | bottom  P:C vs var ]
-
-    Region + time filters are applied; all (time × space) samples inside are pooled.
-    Panels with <min_samples> finite pairs are skipped.
-
-    method="hist" is ~10–100× faster on very large datasets.
+    Render a 2×2 **stoichiometry vs variable** density figure for a functional group,
+    optionally scoped by region and time filters. Each panel pools all available
+    (time × space) samples after depth selection (surface/bottom) and masking, then
+    plots a 2D density estimate.
+    
+    Figure layout
+    -------------
+    [ (0,0) ] Surface:  N:C  vs `variable`
+    [ (0,1) ] Surface:  P:C  vs `variable`
+    [ (1,0) ] Bottom :  N:C  vs `variable`
+    [ (1,1) ] Bottom :  P:C  vs `variable`
+    
+    Where the stoichiometric ratios are taken from native fields:
+        N:C → f"{group}_NC"
+        P:C → f"{group}_PC"
+    
+    Workflow
+    --------
+    1) Time-filter once with `filter_time` → `ds_t`.
+    2) Build surface and bottom slices via `select_depth(ds_t, "surface"|"bottom")`.
+    3) Build region masks once via `build_region_masks(ds, region)` (node/element aware).
+    4) For each side (surface/bottom), resolve:
+         - `variable` via `eval_group_or_var(ds_depth, variable, groups)`
+         - `NC` as f"{group}_NC"
+         - `PC` as f"{group}_PC"
+       Then apply prebuilt region masks to each DataArray.
+    5) For each panel, align and flatten paired arrays with `align_flatten_pair(...)`,
+       optionally subsampling up to `sample_max`. If finite pair count < `min_samples`,
+       the panel is skipped.
+    6) Compute 2D density:
+         - `method="kde"` → Gaussian KDE via `_kde2d` (bandwidth from `bw_method`)
+         - `method="hist"` → Fast smoothed 2D histogram via `_kde2d_hist`
+    7) Plot density with `pcolormesh`. Optionally underlay up to `scatter_underlay`
+       random points to show support. Apply per-variable style overrides (cmap, vmin, vmax).
+    8) Save one PNG for the 2×2 figure.
+    
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset with required fields for the chosen `group` and `variable`,
+        plus grid coordinates for masking if `region` is provided.
+    group : str
+        Functional group tag used to derive stoichiometric names, e.g. `"P5"` →
+        `"P5_NC"` and `"P5_PC"`.
+    variable : str
+        Target variable/expression to compare against (y-axis). Resolved via
+        `eval_group_or_var` using `groups` if provided.
+    region : (str, dict), optional
+        Spatial scope as `(name, spec)`. `spec` is accepted by `build_region_masks`
+        (e.g., shapefile or CSV boundary). If `None`, the full domain is used.
+    months, years : list[int], optional
+        Calendar filters: months 1–12 and/or integer years. Can be combined.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    base_dir : str
+        Run root; used by `file_prefix(base_dir)` to form the filename stem.
+    figures_root : str
+        Output root directory (created if missing).
+    groups : dict, optional
+        Global alias/expression mapping for resolving `variable` via `eval_group_or_var`.
+    dpi : int, default 150
+        Output PNG resolution.
+    figsize : (float, float), default (11, 9)
+        Figure size in inches for the 2×2 layout.
+    cmap : str, default "viridis"
+        Default colormap for density; can be overridden via `styles[variable]["cmap"]`.
+    grids : int, default 100
+        Grid resolution per axis for KDE/hist density (higher → smoother/denser but slower).
+    bw_method : float or {"scott","silverman"}, default "scott"
+        Bandwidth for KDE when `method="kde"`. Ignored for `method="hist"`.
+    min_samples : int, default 200
+        Minimum number of finite (x,y) pairs required to render a panel.
+    scatter_underlay : int, default 0
+        If >0, plots up to this many random (x,y) points beneath the density for context.
+    verbose : bool, default False
+        Print progress, skip reasons, and panel diagnostics.
+    styles : dict, optional
+        Per-variable style overrides (keyed by `variable`). Recognized keys:
+          - "cmap": str or Colormap
+          - "vmin": float (used for y-axis limit of `variable`)
+          - "vmax": float (used for y-axis limit of `variable`)
+    method : {"kde","hist"}, default "kde"
+        Density backend:
+          - "kde": Gaussian KDE (highest quality; slowest on very large samples).
+          - "hist": Smoothed 2D histogram (≈10–100× faster; good for big data).
+    sample_max : int, optional (default 200_000)
+        If provided, randomly subsample at most this many finite pairs before density
+        estimation (improves performance on very large datasets).
+    hist_sigma : float, default 1.2
+        Gaussian smoothing (in grid cells) applied to the 2D histogram when `method="hist"`.
+    random_seed : int, optional (default 12345)
+        Seed for reproducible subsampling and underlay selection.
+    
+    Returns
+    -------
+    None
+        Saves a single PNG named like:
+        ``<prefix>__KDE-Stoich__<group>__<variable>__<RegionTag>__<TimeLabel>.png``
+    
+    Notes
+    -----
+    - Panels are independently skipped if centers cannot be aligned, alignment fails,
+      or there are fewer than `min_samples` valid pairs.
+    - `vmin`/`vmax` from `styles` (for `variable`) are applied to the **y-axis** range.
+    - Use `method="hist"` for very large datasets; combine with `sample_max` for speed.
     """
+
     outdir = out_dir(base_dir, figures_root)
     prefix = file_prefix(base_dir)
     label = build_time_window_label(months, years, start_date, end_date)

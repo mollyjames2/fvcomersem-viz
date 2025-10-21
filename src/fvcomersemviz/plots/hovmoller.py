@@ -64,11 +64,93 @@ def station_hovmoller(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
     """
-    Hovmöller plots (time vs depth) at given stations.
+    Plot Hovmöller diagrams (time vs. vertical coordinate) for one or more variables
+    at one or more **stations** (nearest model column to each (lat, lon)).
+    Saves one PNG per (station × variable × axis-mode).
 
-    axis='sigma'  -> y-axis is sigma (siglay) coordinate
-    axis='z'      -> y-axis is absolute depth (m, negative down); will interpolate to z_levels
-                     (if z_levels is None, we auto-build them from station column min depth to 0)
+    Two vertical axis modes are supported:
+
+    - ``axis='sigma'``: y-axis is the model's sigma coordinate (``siglay``).
+      Data are shown on native layers (no vertical interpolation).
+    - ``axis='z'``: y-axis is **absolute depth** in meters (negative downward).
+      Each station column is **interpolated** from sigma layers onto a shared set of
+      absolute depth levels ``z_levels``. If ``z_levels`` is not provided, a default
+      is auto-built from the column's minimum depth to 0 m (surface).
+
+    Workflow
+    --------
+    1. Apply the time filter with ``filter_time`` (months/years/date bounds) to obtain
+       a consistent dataset for station lookup and plotting.
+    2. For each station, find the nearest index for ``'node'`` and/or ``'nele'`` using
+       ``nearest_index_for_dim``. The data array is sliced on whichever of those dims it has.
+    3. For each variable, resolve the DataArray via ``eval_group_or_var(ds_t, var, groups)``.
+    4. Validate required dims: must have ``'time'`` and ``'siglay'``.
+    5. Build the panel:
+       - **sigma mode**: plot ``pcolormesh(time, siglay, values)``.
+       - **z mode**: create/obtain per-station z profiles with ``ensure_z_from_sigma``,
+         interpolate (time, siglay) → (time, z) using ``_interp_profile_to_z`` via
+         ``xr.apply_ufunc``, then plot ``pcolormesh(time, z, values)``.
+    6. Determine colour scaling with the following priority:
+         ``styles[var]['norm']`` > (``styles[var]['vmin']``, ``styles[var]['vmax']``)
+         > (``vmin``, ``vmax``) > robust percentiles of the plotted values.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset containing variables to plot and vertical sigma information.
+    variables : list of str
+        Variable or expression names. Each is resolved through ``groups`` if provided.
+    stations : list of (str, float, float)
+        Stations as ``(name, lat, lon)``. The nearest model column (node/element) is used.
+    axis : {"sigma", "z"}, default "z"
+        Vertical axis mode:
+          - "sigma": native sigma layers (no interpolation).
+          - "z": absolute depth (m, negative downward) with interpolation onto ``z_levels``.
+    z_levels : array-like of float, optional
+        Absolute depth levels (negative downward) used when ``axis="z"``.
+        If ``None``, levels are auto-generated from the station column’s minimum depth to 0 m.
+    months, years : list[int], optional
+        Calendar-based time filters (1–12 months; integer years). Can be combined.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    base_dir : str
+        Run root; used by ``file_prefix(base_dir)`` to construct output filenames.
+    figures_root : str
+        Root directory for figure outputs (created if missing).
+    groups : dict, optional
+        Global alias/expression mapping for variable resolution by ``eval_group_or_var``.
+    cmap : str, default "viridis"
+        Colormap for the pcolormesh (can be overridden per-variable via ``styles``).
+    vmin, vmax : float, optional
+        Global colour limits used when a per-variable norm or explicit vmin/vmax are not supplied.
+    dpi : int, default 150
+        PNG resolution.
+    figsize : tuple, default (9, 5)
+        Figure size in inches.
+    verbose : bool, default True
+        Print progress and skip reasons.
+    styles : dict, optional
+        Per-variable style overrides. For key ``var``, recognized entries:
+          - ``"cmap"``: str or Colormap
+          - ``"norm"``: matplotlib.colors.Normalize (takes precedence over vmin/vmax)
+          - ``"vmin"``: float
+          - ``"vmax"``: float
+
+    Returns
+    -------
+    None
+        Saves a PNG for each (station × variable × axis-mode). Filenames encode the
+        scope (Station-<name>), variable, axis ("sigma" or "z"), and the time window label.
+
+    Notes
+    -----
+    - If a variable lacks either ``'time'`` or ``'siglay'``, it is skipped.
+    - If neither ``'node'`` nor ``'nele'`` can be located for a station, that station-variable
+      pair is skipped.
+    - In ``axis='z'`` mode, vertical coordinates are obtained via ``ensure_z_from_sigma``:
+      picks ``'z'`` (node-centered) or ``'z_nele'`` (element-centered), aligned to the same
+      spatial index used for the variable slice, before interpolation.
+    - Robust colour limits are computed only when no norm or explicit vmin/vmax are present.
     """
     if axis not in ("sigma", "z"):
         raise ValueError("axis must be 'sigma' or 'z'.")

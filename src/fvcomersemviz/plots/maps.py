@@ -142,6 +142,96 @@ def domain_map(
     verbose: bool = False,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
+    """
+    Render domain-wide maps (triangular mesh) for one or more variables at a chosen
+    depth and time window, saving either **instantaneous** snapshots or the **time mean**.
+
+    Workflow
+    --------
+    1. Depth selection: `select_depth(ds, depth)` (supports sigma keywords, depth-avg,
+       and absolute depth via z meters, negative downward).
+    2. Time filter: `filter_time(...)` using months/years/date bounds.
+    3. For each variable:
+       a. Resolve via `eval_group_or_var(ds_t, var, groups)`.
+       b. If an absolute z depth was requested, refine with `select_da_by_z(...)`.
+       c. Determine plotting center: node ('node' in dims) or element ('nele' in dims).
+       d. Decide the time(s) to plot:
+          - If `at_time`/`at_times` provided ? plot one PNG per chosen instant
+            (selection via `_choose_instants(..., method=time_method)`).
+          - Else ? plot the mean over 'time' (if present).
+       e. Build color scaling:
+          - If a `norm` is provided via `styles[var]["norm"]`, it takes priority.
+          - Else use explicit vmin/vmax from `styles` (or `clim`), or compute robust
+            limits from data using `robust_q` percentiles.
+       f. Draw with `_plot_tripcolor_full(...)` on a triangulation from `build_triangulation(ds)`.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset with grid variables (lon/lat, optional 'nv') and fields to map.
+    variables : list of str
+        Variable or expression names to map (resolved via `groups` if provided).
+    depth : Any
+        Depth selector passed to `select_depth`, e.g. "surface", "bottom", "depth_avg",
+        sigma value, or absolute depth forms: -10.0, ("z_m", -10.0), or {"z_m": -10.0}.
+        Absolute depth refinement is applied per variable with `select_da_by_z`.
+    months, years : list[int], optional
+        Calendar filters (1–12 months, year integers). Can be combined.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    at_time : Any, optional
+        A single desired timestamp (e.g., numpy datetime64, pandas Timestamp, or ISO string)
+        for instantaneous plotting.
+    at_times : sequence, optional
+        Multiple desired timestamps. If both `at_time` and `at_times` are None, a mean over
+        the time window is plotted instead.
+    time_method : {"nearest", "pad", "backfill"}, default "nearest"
+        Selection method passed to `_choose_instants` when matching requested instants to
+        available model times.
+    base_dir : str
+        Run root; used to construct filename prefix via `file_prefix(base_dir)`.
+    figures_root : str
+        Output root directory; final PNGs are written under this path.
+    groups : dict, optional
+        Global alias/expression mapping used by `eval_group_or_var`.
+    cmap : str, default "viridis"
+        Default colormap, can be overridden per-variable in `styles`.
+    clim : (float, float), optional
+        Default color limits (vmin, vmax) if no per-variable vmin/vmax and no `norm` is provided.
+    robust_q : (float, float), default (5, 95)
+        Percentiles for robust auto-scaling when limits are not explicitly given.
+    dpi : int, default 150
+        Output PNG resolution.
+    figsize : (float, float), default (8, 6)
+        Figure size in inches.
+    shading : {"flat", "gouraud"}, default "gouraud"
+        Triangulation shading for tripcolor; can be overridden per-variable in `styles`.
+    grid_on : bool, default False
+        If True, overlay the mesh edges (useful for diagnostics).
+    verbose : bool, default False
+        Print progress and skip reasons.
+    styles : dict, optional
+        Per-variable style overrides. For key `var`, recognized entries:
+          - "cmap": str or Colormap
+          - "norm": matplotlib.colors.Normalize (takes precedence over all limits)
+          - "vmin": float
+          - "vmax": float
+          - "shading": {"flat", "gouraud"}
+
+    Returns
+    -------
+    None
+        Saves one PNG per variable/time selection. Filenames encode scope=Domain,
+        variable, depth tag, and time label (instant or mean over window).
+
+    Notes
+    -----
+    - Plot center is inferred from data dims:
+        'node' ? node-centered plotting, 'nele' ? element-centered plotting.
+      Arrays lacking both dims are skipped.
+    - If `ds` lacks 'nv', triangulation falls back to Delaunay using available coordinates.
+    - Color scaling priority: `norm` > (vmin/vmax in styles) > `clim` > robust percentiles.
+    """
     ds_depth = select_depth(ds, depth, verbose=verbose)
     ds_t = filter_time(ds_depth, months, years, start_date, end_date)
     label_window = build_time_window_label(months, years, start_date, end_date)
@@ -245,6 +335,98 @@ def region_map(
     verbose: bool = False,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
+    """
+    Render **region-masked** maps for one or more variables at a chosen depth and
+    time window, saving instantaneous snapshots or the time mean for each region.
+
+    Workflow
+    --------
+    1. Ensure masking coordinates: requires 'lon' and 'lat' in `ds`.
+    2. Depth selection (`select_depth`) and time filtering (`filter_time`) ? `ds_t`.
+    3. Build a triangulation once via `build_triangulation(ds)`.
+    4. For each region:
+       a. Build node mask from polygon spec:
+          - shapefile: `polygon_mask_from_shapefile(...)`
+          - CSV boundary: `polygon_from_csv_boundary(...)` ? `polygon_mask(...)`
+         Optionally derive element mask via `element_mask_from_node_mask(ds, mask_nodes)`.
+       b. For each variable:
+          - Resolve via `eval_group_or_var(ds_t, var, groups)`.
+          - Apply per-variable absolute depth refinement with `select_da_by_z` if needed.
+          - Determine center ('node' or 'nele'); skip if neither present.
+          - Mask values **outside** the region (nodes or elements). Compute color limits
+            from **in-region** values using priority: `norm` > per-var vmin/vmax > `clim`
+            > robust percentiles `robust_q`. If no finite in-region values, fall back to (0,1).
+          - Plot either requested instants (`at_time`/`at_times`) using `_choose_instants`
+            with `time_method` or the mean over the window.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset with grid variables; must include 'lon' and 'lat' for polygon masking.
+    variables : list of str
+        Variable or expression names to map (resolved via `groups` if provided).
+    regions : list of (str, dict)
+        Regions as (region_name, spec). `spec` must include either:
+          - {"shapefile": <path>, "name_field": ..., "name_equals": ...}
+          - {"csv_boundary": <path>, "lon_col": "lon", "lat_col": "lat"}
+    depth : Any
+        Depth selector passed to `select_depth` (sigma keywords, depth_avg, sigma value,
+        or absolute z forms). Absolute depth refinement is applied per-variable.
+    months, years : list[int], optional
+        Calendar-based time filters.
+    start_date, end_date : str, optional
+        Inclusive date bounds "YYYY-MM-DD".
+    at_time : Any, optional
+        Single desired timestamp for instantaneous plotting.
+    at_times : sequence, optional
+        Multiple desired timestamps. If neither `at_time` nor `at_times` is provided,
+        the function plots the mean over the time window.
+    time_method : {"nearest", "pad", "backfill"}, default "nearest"
+        Method for matching requested instants to available model times.
+    base_dir : str
+        Run root; used for filename prefix via `file_prefix(base_dir)`.
+    figures_root : str
+        Root directory for outputs.
+    groups : dict, optional
+        Global alias/expression mapping used by `eval_group_or_var`.
+    cmap : str, default "viridis"
+        Default colormap; per-variable overrides allowed via `styles`.
+    clim : (float, float), optional
+        Default color limits if not overridden by styles or norm.
+    robust_q : (float, float), default (5, 95)
+        Percentiles for robust auto-scaling when explicit limits are absent.
+    dpi : int, default 150
+        PNG resolution.
+    figsize : (float, float), default (8, 6)
+        Figure size in inches.
+    shading : {"flat", "gouraud"}, default "gouraud"
+        Tripcolor shading; can be overridden per-variable in `styles`.
+    grid_on : bool, default False
+        If True, overlay mesh edges for diagnostics.
+    verbose : bool, default False
+        Print progress, region diagnostics, and skip reasons.
+    styles : dict, optional
+        Per-variable style overrides. For key `var`, recognized entries:
+          - "cmap": str or Colormap
+          - "norm": matplotlib.colors.Normalize (highest priority)
+          - "vmin": float
+          - "vmax": float
+          - "shading": {"flat", "gouraud"}
+
+    Returns
+    -------
+    None
+        Saves PNGs named with scope=Region-<name>, variable, depth tag, and time label
+        (instant vs mean over window).
+
+    Notes
+    -----
+    - Center is inferred from data dims:
+        'node' ? node-centered; 'nele' ? element-centered (requires element mask; thus
+        'nv' is needed to derive it).
+    - Color scaling is computed from **in-region** values only (after masking).
+    - If a region mask is empty or a variable lacks required dims, that plot is skipped.
+    """
     if "lon" not in ds or "lat" not in ds:
         raise ValueError("Dataset must contain 'lon' and 'lat' for region masking.")
 
