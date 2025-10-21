@@ -36,12 +36,15 @@ from fvcomersemviz.plot import (
     sample_output_listing,
 )
 from fvcomersemviz.utils import out_dir, file_prefix
+
+
 from fvcomersemviz.plots.composition import (
     composition_surface_bottom,
     composition_depth_average_single,
     composition_at_depth_single,
-
+    composition_fraction_timeseries,   
 )
+
 
 # -----------------------------------------------------------------------------
 # Project paths (EDIT THESE)
@@ -68,6 +71,31 @@ STATION = ("WE12", 41.90, -83.10)  # (name, lat, lon)
 MONTHS_JJA     = [6, 7, 8]              # Jun–Aug
 MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10] # Apr–Oct
 YEARS_2018     = [2018]
+
+
+#---------
+# Optional colour overrides (variable -> colour)
+COLORS = {
+    "P1_c": "#1f77b4",  # blue
+    "P2_c": "#2ca02c",  # green
+    "P4_c": "#9467bd",  # purple
+    "Z4_c": "#ff7f0e",  # orange
+    "Z5_c": "#d62728",  # red
+    "Z6_c": "#8c564b",  # brown
+}
+
+REGIONS = [
+    ("Central", {
+        "shapefile": "../data/shapefiles/central_basin_single.shp"
+    }),
+    ("East", {
+        "shapefile": "../data/shapefiles/east_basin_single.shp"
+    }),
+    ("West", {
+        "shapefile": "../data/shapefiles/west_basin_single.shp"
+    }),
+]
+
 
 def main():
     if not os.environ.get("PYTHONWARNINGS"):
@@ -149,6 +177,63 @@ def main():
         base_dir=BASE_DIR, figures_root=FIG_DIR,
         phyto_vars=PHYTO_VARS, zoo_vars=ZOO_VARS,
     )
+    
+    # =========================================================================
+    # 5) DOMAIN • Apr–Oct 2018 • Surface — Fraction time-series
+    # =========================================================================
+    info(" Example 5: DOMAIN • Apr–Oct 2018 • Surface — Fraction time-series")
+    phy_path, zoo_path = composition_fraction_timeseries(
+        ds,
+        phyto_vars=PHYTO_VARS, zoo_vars=ZOO_VARS,
+        scope="domain",
+        depth="surface",
+        months=MONTHS_APR_OCT, years=YEARS_2018,
+        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        colors=COLORS,          # optional
+        show_std_band=True,     # mean ±1σ across space
+        linewidth=2.0,
+    )
+    if phy_path: kv("Saved (Phyto TS)", phy_path)
+    if zoo_path: kv("Saved (Zoo TS)",   zoo_path)
+
+    # =========================================================================
+    # 6) REGIONS • Apr–Oct 2018 • Surface — Fraction time-series
+    # =========================================================================
+    info(" Example 6: REGIONS • Apr–Oct 2018 • Surface — Fraction time-series")
+    bullet("One figure with N stacked panels (one per region)")
+    phy_path, zoo_path = composition_fraction_timeseries(
+        ds,
+        phyto_vars=PHYTO_VARS, zoo_vars=ZOO_VARS,
+        scope="region", regions=REGIONS,
+        depth="surface",
+        months=MONTHS_APR_OCT, years=YEARS_2018,
+        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        colors=COLORS,
+        show_std_band=True,
+        linewidth=2.0,
+    )
+    if phy_path: kv("Saved (Phyto TS, regions)", phy_path)
+    if zoo_path: kv("Saved (Zoo TS, regions)",   zoo_path)
+
+    # =========================================================================
+    # 7) STATIONS • Apr–Oct 2018 • Surface — Fraction time-series
+    # =========================================================================
+    info(" Example 7: STATIONS • Apr–Oct 2018 • Surface — Fraction time-series")
+    bullet("One figure with N stacked panels (one per station)")
+    phy_path, zoo_path = composition_fraction_timeseries(
+        ds,
+        phyto_vars=PHYTO_VARS, zoo_vars=ZOO_VARS,
+        scope="station", stations=[STATION],
+        depth="surface",
+        months=MONTHS_APR_OCT, years=YEARS_2018,
+        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        colors=COLORS,
+        show_std_band=True,    # at a single station this band collapses to 0
+        linewidth=2.0,
+    )
+    if phy_path: kv("Saved (Phyto TS, stations)", phy_path)
+    if zoo_path: kv("Saved (Zoo TS, stations)",   zoo_path)
+
 
     print(hr("=")); print("Done"); print(hr("="))
 
