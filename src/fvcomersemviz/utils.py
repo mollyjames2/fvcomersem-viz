@@ -19,18 +19,93 @@ from pyproj import Geod
 
 
 def _lon_lat_arrays_nodes_only(ds: xr.Dataset) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Extract 1D longitude and latitude arrays from node-based coordinates.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input xarray Dataset expected to contain node-level coordinates
+        named 'lon' and 'lat'.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Flattened longitude and latitude arrays (1D).
+
+    Raises
+    ------
+    ValueError
+        If the dataset does not contain 'lon' and 'lat' variables.
+    """
     if "lon" in ds and "lat" in ds:
         return np.asarray(ds["lon"].values).ravel(), np.asarray(ds["lat"].values).ravel()
     raise ValueError("Node triangulation requires 'lon' and 'lat' (node coordinates).")
 
+
 def _lon_lat_arrays_any(ds: xr.Dataset) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Extract 1D longitude and latitude arrays from either node or cell-center coordinates.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input xarray Dataset that may contain either:
+        - 'lon' and 'lat' (node coordinates), or
+        - 'lonc' and 'latc' (cell-center coordinates).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Flattened longitude and latitude arrays (1D).
+
+    Raises
+    ------
+    ValueError
+        If neither ('lon','lat') nor ('lonc','latc') are present in the dataset.
+    """
     if "lon" in ds and "lat" in ds:
         return np.asarray(ds["lon"].values).ravel(), np.asarray(ds["lat"].values).ravel()
     if "lonc" in ds and "latc" in ds:
         return np.asarray(ds["lonc"].values).ravel(), np.asarray(ds["latc"].values).ravel()
     raise ValueError("Dataset needs 'lon'/'lat' or 'lonc'/'latc'.")
 
+
 def build_triangulation(ds: xr.Dataset) -> mtri.Triangulation:
+    """
+    Build a matplotlib Triangulation from FVCOM-style grid data.
+
+    This function constructs a triangular mesh based on available
+    node connectivity ('nv') and coordinate variables. If the dataset
+    defines the FVCOM connectivity table ('nv'), it uses that to build
+    an exact triangulation. Otherwise, it falls back to a Delaunay
+    triangulation of available coordinates (node or cell centers).
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Input xarray Dataset containing either:
+        - 'lon' and 'lat' node coordinates and an 'nv' connectivity table, or
+        - only coordinates ('lon','lat') or ('lonc','latc') for fallback Delaunay mesh.
+
+    Returns
+    -------
+    mtri.Triangulation
+        A matplotlib Triangulation object representing the grid topology.
+
+    Raises
+    ------
+    ValueError
+        If 'nv' exists but is not 2D or does not contain exactly 3 indices per triangle.
+        If required coordinate variables ('lon'/'lat' or 'lonc'/'latc') are missing.
+
+    Notes
+    -----
+    - For standard FVCOM grids, 'nv' is expected to be shaped (3, nele) or (nele, 3),
+      with 1-based node indices. They are converted internally to 0-based indexing.
+    - When 'nv' is absent, the function falls back to a Delaunay triangulation
+      built from the available lon/lat coordinate set (nodes or cell centers).
+    """
     if "nv" in ds:
         # --- REQUIRE node coords with nv
         x, y = _lon_lat_arrays_nodes_only(ds)
@@ -40,10 +115,10 @@ def build_triangulation(ds: xr.Dataset) -> mtri.Triangulation:
         triangles = (nv.T if nv.shape[0] == 3 else nv) - 1
         triangles = triangles.astype(int)
         return mtri.Triangulation(x, y, triangles=triangles)
+
     # --- Delaunay fallback: allow either node or element centers
     x, y = _lon_lat_arrays_any(ds)
     return mtri.Triangulation(x, y)
-
 
 def robust_clims(a: Iterable[float], q: Tuple[float, float] = (5, 95)) -> tuple[float, float]:
     """
