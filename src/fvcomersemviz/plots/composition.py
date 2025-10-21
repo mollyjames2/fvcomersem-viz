@@ -97,7 +97,7 @@ def composition_surface_bottom(
     ds : xr.Dataset
         Source dataset with the variables listed in ``phyto_vars`` / ``zoo_vars``.
     months, years : list[int], optional
-        Time filters (calendar months 1–12; year integers). Can be combined.
+        Time filters (calendar months 1-12; year integers). Can be combined.
     start_date, end_date : str, optional
         Inclusive date bounds "YYYY-MM-DD".
     region : (str, dict), optional
@@ -149,7 +149,7 @@ def composition_surface_bottom(
     zoo_s,   zoo_labels   = _fractional_breakdown(ds_surf, zoo_vars)
     zoo_b,   _            = _fractional_breakdown(ds_bott, zoo_vars)
 
-    # figure – single axes with four bars
+    # figure - single axes with four bars
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
 
     who = "Domain" if region is None and station is None else (
@@ -282,7 +282,7 @@ def composition_depth_average_single(
     phyto_f, phyto_labels = _fractional_breakdown(ds_avg, phyto_vars)
     zoo_f,   zoo_labels   = _fractional_breakdown(ds_avg, zoo_vars)
 
-    # figure – single axes with two bars
+    # figure - single axes with two bars
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
 
     who = "Domain" if region is None and station is None else (
@@ -363,7 +363,7 @@ def composition_at_depth_single(
     z_level : float
         Absolute depth in meters (negative downward), e.g., ``-10.0`` for 10 m below surface.
     tol : float, default 0.75
-        Tolerance (± meters) for selecting the nearest layer to ``z_level``.
+        Tolerance (Â± meters) for selecting the nearest layer to ``z_level``.
     months, years : list[int], optional
         Time filters (calendar-based).
     start_date, end_date : str, optional
@@ -426,7 +426,7 @@ def composition_at_depth_single(
     phyto_f, phyto_labels = _fractional_breakdown(ds_z, phyto_vars)
     zoo_f,   zoo_labels   = _fractional_breakdown(ds_z, zoo_vars)
 
-    # figure – single axes with two bars
+    # figure - single axes with two bars
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
 
     who = "Domain" if region is None and station is None else (

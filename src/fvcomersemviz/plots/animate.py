@@ -645,7 +645,7 @@ def animate_maps(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
 ) -> List[str]:
-"""
+    """
     Animate **maps over time** for one or more variables on a triangular mesh,
     at a selected depth and spatial scope (domain or regions). Saves animated GIFs
     and returns their paths.

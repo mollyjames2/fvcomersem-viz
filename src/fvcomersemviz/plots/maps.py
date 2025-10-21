@@ -176,7 +176,7 @@ def domain_map(
         sigma value, or absolute depth forms: -10.0, ("z_m", -10.0), or {"z_m": -10.0}.
         Absolute depth refinement is applied per variable with `select_da_by_z`.
     months, years : list[int], optional
-        Calendar filters (1–12 months, year integers). Can be combined.
+        Calendar filters (1-12 months, year integers). Can be combined.
     start_date, end_date : str, optional
         Inclusive date bounds "YYYY-MM-DD".
     at_time : Any, optional
