@@ -540,13 +540,13 @@ def region_map(
                 """
                 if center == "node":
                     # full domain length
-                    n_nodes = int(ds.dims["node"])
+                    n_nodes = int(ds.sizes["node"])
                     full = np.full(n_nodes, np.nan, dtype=float)
                     # put region values back into their original node slots
                     full[idx_nodes] = values_full
                     v_in = values_full  # already only in-region
                 else:
-                    n_elems = int(ds.dims["nele"])
+                    n_elems = int(ds.sizes["nele"])
                     full = np.full(n_elems, np.nan, dtype=float)
                     full[idx_elems] = values_full
                     v_in = values_full  # already only in-region
