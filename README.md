@@ -59,7 +59,7 @@ python tests/check_install.py
 
 ## Examples
 
-Browse and run the ready-to-use scripts in the **[examples/](https://github.com/mollyjames2/fvcomersem-viz/tree/main/examples)** folder or run the notebooks in the **[notebooks]** folder in jupyter notebook
+Browse and run the ready-to-use scripts in the **[examples/](https://github.com/mollyjames2/fvcomersem-viz/tree/main/examples)** folder or run the notebooks in the **[notebooks/](https://github.com/mollyjames2/fvcomersem-viz/tree/main/notebooks)** folder in jupyter notebook
 
 ---
 
