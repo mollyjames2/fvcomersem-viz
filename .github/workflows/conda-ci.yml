@@ -1,4 +1,5 @@
-name: build and test
+# .github/workflows/conda-ci.yml
+name: Build and test
 
 on:
   push:
@@ -16,35 +17,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Fast, cached conda env setup with conda-forge
       - name: Set up micromamba (conda-forge)
         uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: fviz
-          cache-downloads: true
-          cache-environment: true
-          # same stack you use locally (+ pip so we can do pip -e .)
+          condarc: |
+            channels:
+              - conda-forge
+            channel_priority: strict
           create-args: >-
             python=${{ matrix.python-version }}
-            geopandas
-            shapely
-            pyproj
-            rtree
-            notebook
-            pip
-          channels: conda-forge
+            geopandas shapely pyproj rtree notebook pip
+          cache-downloads: true
+          cache-environment: true
 
-      # Editable install (pip -e .) inside the conda env
-      - name: Editable install
+      - name: Editable install (pip -e .)
         run: micromamba run -n fviz pip install -e .
 
-      # Optional: show what got installed (good for debugging)
       - name: Show environment
         run: |
           micromamba run -n fviz python -V
-          micromamba run -n fviz python -c "import sys, fvcomersemviz; print('fvcomersemviz', getattr(fvcomersemviz,'__version__','?')); print('site:', sys.executable)"
+          micromamba run -n fviz python -c "import sys, fvcomersemviz; print('fvcomersemviz', getattr(fvcomersemviz,'__version__','?')); print('python:', sys.executable)"
 
-      # Your existing install check
       - name: Check installation
         run: micromamba run -n fviz python tests/check_install.py
 
