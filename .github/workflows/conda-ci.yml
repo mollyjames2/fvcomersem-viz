@@ -1,4 +1,4 @@
-name: CI (conda env + editable install)
+name: build and test
 
 on:
   push:

@@ -1,5 +1,4 @@
-[![CI (conda env + editable install)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml/badge.svg)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml)[![GitHub release](https://img.shields.io/github/v/release/mollyjames2/fvcomersem-viz)](https://github.com/mollyjames2/fvcomersem-viz/releases)[![License](https://img.shields.io/github/license/mollyjames2/fvcomersem-viz)](LICENSE)[![Issues](https://img.shields.io/github/issues/mollyjames2/fvcomersem-viz)](https://github.com/mollyjames2/fvcomersem-viz/issues)
-
+[![Build and test](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml/badge.svg)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml)
 
 # fvcomersem-viz
 
