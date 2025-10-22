@@ -5,14 +5,18 @@ import os
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
+import pandas as pd
 
-from ..io import filter_time
-from ..regions import apply_scope
+from ..io import filter_time, eval_group_or_var
+from ..regions import apply_scope, build_region_masks, apply_prebuilt_mask
 from ..utils import (
     out_dir, file_prefix,
     select_depth, build_time_window_label,
     resolve_available_vars, sum_over_all_dims,
+    select_da_by_z,                   
+    depth_tag,                
 )
+
 from ..plot import stacked_fraction_bars
 
 
@@ -464,3 +468,428 @@ def composition_at_depth_single(
     if verbose:
         print(f"[composition] saved {path}")
 
+def composition_fraction_timeseries(
+    ds: xr.Dataset,
+    *,
+    phyto_vars: Sequence[str],
+    zoo_vars: Sequence[str],
+    # scope
+    scope: str = "domain",                                # 'domain' | 'region' | 'station'
+    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,   # [(name, spec), ...]
+    stations: Optional[Sequence[Tuple[str, float, float]]] = None,    # [(name, lat, lon), ...]
+    # time/depth filters
+    depth: Any = "surface",
+    months: Optional[Sequence[int]] = None,
+    years: Optional[Sequence[int]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    # output
+    base_dir: str = "",
+    figures_root: str = "",
+    # style
+    show_std_band: bool = True,                            # ±1σ shading across space
+    colors: Optional[Dict[str, Any]] = None,               # optional per-variable color map
+    linewidth: float = 2.0,
+    alpha_band: float = 0.20,
+    figsize_per_panel: Tuple[float, float] = (10, 3.2),    # width, height per panel
+    dpi: int = 150,
+    verbose: bool = False,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Time-resolved community composition (fractions) for Phytoplankton and Zooplankton.
+
+    This routine produces **two figures** (one for PHYTO, one for ZOO). Each figure contains
+    1..N stacked panels depending on `scope`:
+        • scope='domain'  → 1 panel labelled "Domain"
+        • scope='region'  → one panel per region in `regions` (node/element masks respected)
+        • scope='station' → one panel per station in `stations` (nearest column)
+
+    For every panel and timestep, variables in the corresponding group are divided by the
+    **group total** (sum across all provided variables that are actually present) to yield
+    per-variable fractions in [0,1]. Fractions are then reduced **across space** (nodes or
+    elements, as appropriate) to produce a **mean line** and, optionally, a **±1σ band**
+    representing spatial variability.
+
+    Depth and time filters are applied **once** up front:
+      `select_depth(ds, depth)` → `filter_time(... months/years/start/end ...)`.
+    For absolute-z requests (e.g., -10, {"z_m": -10}), a per-variable refinement is attempted
+    via `select_da_by_z(...)` so the correct vertical level is extracted for each DataArray.
+
+    Region handling is center-aware: node-centered and element-centered variables are masked
+    against prebuilt region masks (`mask_nodes`, `mask_elems`) using their own space dims.
+
+    The function saves PNGs whose filenames encode group, scope, depth tag, and time window,
+    and returns the two output paths.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset containing the variables listed in `phyto_vars` / `zoo_vars`. Must include
+        the grid space dims (e.g., 'node' and/or 'nele') and a 'time' dimension for plotted fields.
+    phyto_vars : Sequence[str]
+        Candidate variable names for the phytoplankton group. Only variables present (and resolvable
+        via `eval_group_or_var` if imported in your project) are used per panel.
+    zoo_vars : Sequence[str]
+        Candidate variable names for the zooplankton group. Same presence/resolve logic as above.
+
+    scope : {'domain', 'region', 'station'}, default 'domain'
+        What each panel represents.
+          - 'domain' : one panel averaged over the full domain.
+          - 'region' : one panel for each entry in `regions`; masks are node/element aware.
+          - 'station': one panel for each entry in `stations`; nearest column is selected.
+
+    regions : Sequence[Tuple[str, Dict[str, Any]]], optional
+        Regions as `(name, spec)` tuples, required for `scope='region'`. The `spec` should be
+        compatible with your region utilities (e.g., shapefile or CSV boundary). Masks are built
+        once from the **windowed dataset** and then applied center-aware per DataArray.
+    stations : Sequence[Tuple[str, float, float]], optional
+        Stations as `(name, lat, lon)` tuples, required for `scope='station'`. The nearest column
+        is selected for each variable.
+
+    depth : Any, default 'surface'
+        Vertical selector passed to `select_depth`, e.g.:
+          'surface' | 'bottom' | 'depth_avg' | int sigma index | float sigma in [-1,0]
+          absolute depths (meters, negative down): -10.0, ('z_m', -10.0), {'z_m': -10.0}
+        If absolute depth is requested, the function refines each DataArray with `select_da_by_z(...)`.
+
+    months, years : Optional[Sequence[int]]
+        Calendar filters. Examples: months=[4,5,6,7,8,9,10], years=[2018].
+    start_date, end_date : Optional[str]
+        Inclusive date bounds in "YYYY-MM-DD" format. May be used with or without `months`/`years`.
+
+    base_dir : str, default ""
+        Model run root; used only to form an output filename prefix via `file_prefix(base_dir)`.
+    figures_root : str, default ""
+        Root directory where figure files are saved (a 'composition' subfolder may be created by
+        your `out_dir` policy).
+
+    show_std_band : bool, default True
+        If True, shade the ±1σ interval across space around the mean fraction line in each panel.
+        At stations (single point), the band collapses to zero width.
+    colors : dict, optional
+        Optional mapping from variable name → matplotlib color (e.g., {'P1_c':'#b3de69'}). Any
+        variable not listed uses the current matplotlib color cycle to ensure consistent colors
+        across panels.
+    linewidth : float, default 2.0
+        Line width for fraction curves.
+    alpha_band : float, default 0.20
+        Opacity for the ±1σ shading band.
+    figsize_per_panel : (float, float), default (10, 3.2)
+        Size in inches used to scale the figure height as `n_panels * figsize_per_panel[1]`.
+    dpi : int, default 150
+        Output figure resolution.
+    verbose : bool, default False
+        If True, print progress and skip reasons (unresolvable variables, empty masks, etc.).
+
+    Returns
+    -------
+    (phyto_path, zoo_path) : Tuple[Optional[str], Optional[str]]
+        Full paths to the saved PNGs for the PHYTO and ZOO figures, respectively. A value can be
+        `None` if that group had nothing to plot (e.g., all variables missing after masking).
+
+    Behavior & Implementation Notes
+    -------------------------------
+    • **Safe division**: Fractions are computed with a mask-first strategy to avoid divide warnings:
+        valid = isfinite(total) & (total > 0)
+        frac  = (var.where(valid)) / (total.where(valid))
+      This prevents Dask from dividing by zero/NaN and eliminates runtime warnings.
+
+    • **Space reduction**: For each time step, fractions are averaged over all remaining space dims
+      (everything except 'time'); the standard deviation over those dims is used for the ±1σ band.
+
+    • **Region masking**: Masks are built once per region (on the windowed dataset) and applied to
+      each DataArray using its native center (node vs element). If a mask selects nothing for a
+      region, that panel is skipped.
+
+    • **Variable resolution**: Variables are taken directly from the dataset when present; otherwise
+      the function attempts `eval_group_or_var(ds, name)` if available in your project to support
+      aliases or expressions. Only variables that (a) resolve and (b) contain a 'time' dimension
+      are kept.
+
+    • **Output filenames**: Encoded with group, scope, depth tag, and time window:
+        <prefix>__CompositionTS__<Group>__<ScopeTag>__<DepthTag>__<TimeLabel>.png
+      where:
+        <prefix>   = file_prefix(base_dir)
+        <ScopeTag> = 'Domain' | 'Regions-N' | 'Stations-N'
+        <DepthTag> = from utils.depth_tag(depth)
+        <TimeLabel>= from utils.build_time_window_label(...)
+
+    Examples
+    --------
+    >>> composition_fraction_timeseries(
+    ...     ds, phyto_vars=['P1_c','P2_c','P4_c'], zoo_vars=['Z4_c','Z5_c','Z6_c'],
+    ...     scope='region', regions=[('West', specW), ('Central', specC), ('East', specE)],
+    ...     depth='surface', months=[4,5,6,7,8,9,10], years=[2018],
+    ...     base_dir=BASE_DIR, figures_root=FIG_DIR,
+    ...     colors={'P1_c':'#a6cee3','P2_c':'#1f78b4','P4_c':'#b2df8a'}
+    ... )
+    """
+
+    # -------- helpers --------
+    def _log(msg: str) -> None:
+        if verbose:
+            print(msg)
+
+    def _space_dims(da: xr.DataArray) -> List[str]:
+        # everything except time (siglay should be removed by depth selection)
+        return [d for d in da.dims if d != "time"]
+
+    def _apply_abs_z_if_needed(da: xr.DataArray, ds_for_z: xr.Dataset) -> xr.DataArray:
+        # refine to absolute depth if requested
+        try:
+            if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
+                return select_da_by_z(da, ds_for_z, float(depth), verbose=verbose)
+            if isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
+                return select_da_by_z(da, ds_for_z, float(depth[1]), verbose=verbose)
+            if isinstance(depth, dict) and "z_m" in depth:
+                return select_da_by_z(da, ds_for_z, float(depth["z_m"]), verbose=verbose)
+        except Exception as e:
+            _log(f"[composition/abs-z] skipping abs-z refinement: {e}")
+        return da
+    
+    
+    def _safe_fraction(num: xr.DataArray, den: xr.DataArray) -> xr.DataArray:
+        """
+        Compute num/den WITHOUT triggering dask divide warnings.
+        We first mask both arrays where denominator is invalid, then divide.
+        """
+        valid = np.isfinite(den) & (den > 0)
+        den_clean = den.where(valid)          # NaN where invalid → won't be used in division
+        num_clean = num.where(valid)          # keep numerator only where denom valid
+        return num_clean / den_clean          # division only happens on valid cells
+
+
+    def _mask_da(da: xr.DataArray,
+                 mask_nodes: Optional[np.ndarray],
+                 mask_elems: Optional[np.ndarray]) -> xr.DataArray:
+        """Apply prebuilt region mask to a DA, honoring its space center."""
+        if mask_nodes is None and mask_elems is None:
+            return da
+        return apply_prebuilt_mask(da, mask_nodes, mask_elems)
+
+    def _fraction_timeseries_for_group(
+        ds_scoped: xr.Dataset,
+        var_names: Sequence[str],
+        *,
+        mask_nodes: Optional[np.ndarray] = None,
+        mask_elems: Optional[np.ndarray] = None,
+    ) -> Optional[Dict[str, Tuple[pd.DatetimeIndex, np.ndarray, Optional[np.ndarray]]]]:
+        """
+        For a list of variables at a given scope, return:
+            { var_name: (time_index, mean_fraction[t], std_fraction[t]) }
+        If nothing usable, returns None.
+        """
+        # keep only available variables
+        var_names = resolve_available_vars(ds_scoped, var_names)
+        if not var_names:
+            return None
+
+        das: List[xr.DataArray] = []
+        names_in: List[str] = []
+        for v in var_names:
+            try:
+                da = ds_scoped[v] if v in ds_scoped else eval_group_or_var(ds_scoped, v, groups=None)
+            except Exception as e:
+                _log(f"[composition] '{v}' not resolvable here: {e}")
+                continue
+
+            da = _apply_abs_z_if_needed(da, ds_scoped)
+            da = _mask_da(da, mask_nodes, mask_elems)
+
+            if "time" not in da.dims:
+                _log(f"[composition] '{v}' has no 'time'; skipping.")
+                continue
+
+            # skip if everything is masked after region mask
+            if not np.isfinite(da).any():
+                _log(f"[composition] '{v}' has no finite data after mask; skipping.")
+                continue
+
+            das.append(da)
+            names_in.append(v)
+
+        if not das:
+            return None
+
+        # Align to common support (time/space)
+        try:
+            das = xr.align(*das, join="inner")
+        except Exception as e:
+            _log(f"[composition] alignment failed: {e}")
+            return None
+
+        # total across variables (per time × space)
+        total = None
+        for da in das:
+            total = da if total is None else (total + da)
+
+        # if totally empty after masking, bail
+        if not np.isfinite(total).any():
+            _log("[composition] total is all-NaN in this scope; skipping panel.")
+            return None
+
+        out: Dict[str, Tuple[pd.DatetimeIndex, np.ndarray, Optional[np.ndarray]]] = {}
+        for v, da in zip(names_in, das):
+            frac = _safe_fraction(da, total)
+
+            # if a var is still entirely NaN after safe division, skip it
+            if not np.isfinite(frac).any():
+                _log(f"[composition] '{v}' has no finite fractions; skipping.")
+                continue
+
+            sdims = _space_dims(frac)
+            if sdims:
+                mean = frac.mean(dim=sdims, skipna=True)
+                std  = frac.std(dim=sdims,  skipna=True) if show_std_band else None
+            else:
+                # single point (e.g., station)
+                mean = frac
+                std  = xr.zeros_like(frac) if show_std_band else None
+
+            t = pd.to_datetime(np.atleast_1d(mean["time"].values))
+            out[v] = (t, np.asarray(mean.values, dtype=float),
+                      (None if std is None else np.asarray(std.values, dtype=float)))
+
+        return out or None
+
+    def _panel_title(scope_kind: str, label: str, group_label: str) -> str:
+        left = "Domain" if scope_kind == "domain" else label
+        return f"{group_label} composition {left} averaged"
+
+    def _draw_figure(
+        group_label: str,
+        panels: Sequence[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]],
+        group_vars: Sequence[str],
+        fig_tag_bits: str,
+    ) -> Optional[str]:
+        # build data for all panels
+        payload: List[Tuple[str, Dict[str, Tuple[pd.DatetimeIndex, np.ndarray, Optional[np.ndarray]]]]] = []
+        for name, ds_scoped, m_nodes, m_elems in panels:
+            res = _fraction_timeseries_for_group(ds_scoped, group_vars, mask_nodes=m_nodes, mask_elems=m_elems)
+            if res is None:
+                _log(f"[composition/{group_label}] nothing to plot for panel '{name}'.")
+                continue
+            payload.append((name, res))
+
+        if not payload:
+            return None
+
+        # figure size scales with number of panels
+        n_pan = len(payload)
+        fig_h = max(2.6, n_pan * figsize_per_panel[1])
+        fig_w = figsize_per_panel[0]
+        fig, axes = plt.subplots(n_pan, 1, figsize=(fig_w, fig_h), sharex=True, constrained_layout=True)
+        if n_pan == 1:
+            axes = [axes]  # type: ignore[assignment]
+
+        # color palette per variable (stable across panels)
+        cycle = plt.rcParams.get("axes.prop_cycle", None)
+        default_colors = (cycle.by_key().get("color", [f"C{i}" for i in range(10)] )
+                          if cycle is not None else [f"C{i}" for i in range(10)])
+        palette: Dict[str, Any] = {}
+        for i, v in enumerate(group_vars):
+            palette[v] = (colors.get(v) if colors and v in colors else default_colors[i % len(default_colors)])
+
+        # plot each panel
+        for ax, (panel_name, res) in zip(axes, payload):
+            # union of time for x-limits (guard empty)
+            t_candidates: List[pd.DatetimeIndex] = [t for (_v, (t, _m, _s)) in res.items() if len(t) > 0]
+            if t_candidates:
+                t0 = min(ti[0] for ti in t_candidates)
+                t1 = max(ti[-1] for ti in t_candidates)
+                ax.set_xlim(t0, t1)
+
+            handles, labels = [], []
+            for v in group_vars:
+                if v not in res:
+                    continue
+                t, mean, std = res[v]
+                (line,) = ax.plot(t, mean, lw=linewidth, color=palette[v], label=v, zorder=3)
+                if show_std_band and std is not None:
+                    lo = np.maximum(0.0, mean - std)
+                    hi = np.minimum(1.0, mean + std)
+                    ax.fill_between(t, lo, hi, color=palette[v], alpha=alpha_band, linewidth=0, zorder=2)
+                handles.append(line); labels.append(v)
+
+            ax.set_ylim(0.0, 1.0)
+            ax.set_ylabel("Fraction (0–1)")
+            ax.set_title(_panel_title(scope_norm, panel_name, group_label), loc="center")
+
+            if ax is axes[0] and handles:
+                ax.legend(handles=handles, labels=labels, loc="upper right", frameon=False)
+
+        axes[-1].set_xlabel("Time (yyyy-mm)")
+
+        # save
+        outdir = out_dir(base_dir, figures_root)
+        os.makedirs(outdir, exist_ok=True)
+        prefix = file_prefix(base_dir)
+        when = build_time_window_label(months, years, start_date, end_date)
+        dtag = depth_tag(depth)
+        fname = f"{prefix}__CompositionTS__{group_label}__{fig_tag_bits}__{dtag}__{when}.png"
+        path = os.path.join(outdir, fname)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        _log(f"[composition/{group_label}] saved {path}")
+        return path
+
+    # -------- select depth + time window once --------
+    ds_depth = select_depth(ds, depth, verbose=verbose)
+    ds_t = filter_time(ds_depth, months=months, years=years, start_date=start_date, end_date=end_date)
+
+    # -------- panels by scope --------
+    scope_norm = scope.strip().lower()
+    if scope_norm not in ("domain", "region", "station"):
+        raise ValueError("scope must be 'domain', 'region', or 'station'")
+
+    panels_phyto: List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
+    panels_zoo:   List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
+
+    if scope_norm == "domain":
+        scoped = apply_scope(ds_t, region=None, station=None, verbose=verbose)
+        panels_phyto.append(("Domain", scoped, None, None))
+        panels_zoo.append(("Domain", scoped, None, None))
+        fig_tag = "Domain"
+
+    elif scope_norm == "region":
+        if not regions:
+            raise ValueError("scope='region' requires a non-empty `regions=[(name, spec), ...]`")
+
+        for (name, spec) in regions:
+            # Build masks ON THE SAME windowed dataset
+            try:
+                mask_nodes, mask_elems = build_region_masks(ds_t, (name, spec), verbose=verbose)
+            except Exception as e:
+                _log(f"[composition/region] '{name}' mask failed: {e}; skipping.")
+                continue
+
+            # Quick emptiness check: if neither mask selects anything, skip
+            sel_nodes = int(mask_nodes.sum()) if (mask_nodes is not None and mask_nodes.size) else 0
+            sel_elems = int(mask_elems.sum()) if (mask_elems is not None and mask_elems.size) else 0
+            if sel_nodes == 0 and sel_elems == 0:
+                _log(f"[composition/region] '{name}' mask selects nothing; skipping.")
+                continue
+
+            # Keep original ds_t; masking happens per-DA (center-aware)
+            panels_phyto.append((name, ds_t, mask_nodes, mask_elems))
+            panels_zoo.append((name, ds_t, mask_nodes, mask_elems))
+
+        fig_tag = f"Regions-{len(panels_phyto)}"
+
+    else:  # station
+        if not stations:
+            raise ValueError("scope='station' requires a non-empty `stations=[(name, lat, lon), ...]`")
+        for (name, lat, lon) in stations:
+            scoped = apply_scope(ds_t, region=None, station=(name, lat, lon), verbose=verbose)
+            panels_phyto.append((name, scoped, None, None))
+            panels_zoo.append((name, scoped, None, None))
+        fig_tag = f"Stations-{len(stations)}"
+
+    # ensure we only try to draw variables that exist somewhere (keep full lists; per-panel filters happen inside)
+    phyto_vars = list(phyto_vars)
+    zoo_vars   = list(zoo_vars)
+
+    # -------- render both figures --------
+    phyto_path = _draw_figure("Phyto", panels_phyto, phyto_vars, fig_tag_bits=fig_tag)
+    zoo_path   = _draw_figure("Zoo",   panels_zoo,   zoo_vars,   fig_tag_bits=fig_tag)
+    return phyto_path, zoo_path

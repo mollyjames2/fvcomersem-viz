@@ -17,6 +17,66 @@ from pyproj import Geod
 
 
 
+from .io import eval_group_or_var  
+# utils.py
+
+
+def is_absolute_z(depth: Any) -> bool:
+    """
+    Returns True if `depth` requests an absolute z slice (meters),
+    e.g. -10.0, ("z_m", -10.0), or {"z_m": -10.0}.
+    Returns False for sigma-relative selectors like -0.7 .. 0.0 or "surface"/"bottom"/"depth_avg".
+    """
+    if depth is None:
+        return False
+
+    # numeric → absolute if *not* a sigma-relative number in [-1, 0]
+    if isinstance(depth, (float, np.floating, int)):
+        return not (-1.0 <= float(depth) <= 0.0)
+
+    # tuple form: ("z_m", -10.0)
+    if isinstance(depth, tuple) and len(depth) > 0:
+        return depth[0] == "z_m"
+
+    # dict form: {"z_m": -10.0}
+    if isinstance(depth, dict):
+        return "z_m" in depth
+
+    return False
+
+def resolve_da_with_depth(
+    ds: xr.Dataset,
+    var: str,
+    *,
+    depth: Any = "surface",
+    groups: Optional[dict] = None,
+    verbose: bool = False,
+) -> xr.DataArray:
+    ds_scoped = ds
+    try:
+        ds_scoped = select_depth(ds, depth, verbose=verbose)  
+    except Exception:
+        pass
+
+    da = eval_group_or_var(ds_scoped, var, groups)
+
+    if "siglay" in da.dims:
+        if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
+            da = select_da_by_z(da, ds_scoped, float(depth), verbose=verbose)
+        elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
+            da = select_da_by_z(da, ds_scoped, float(depth[1]), verbose=verbose)
+        elif isinstance(depth, dict) and "z_m" in depth:
+            da = select_da_by_z(da, ds_scoped, float(depth["z_m"]), verbose=verbose)
+        return da
+
+    if verbose:
+        print(f"[resolve] '{var}' has no 'siglay' — lifting to single layer.")
+    sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
+    da = da.expand_dims(siglay=sig)
+    da["siglay"] = sig
+    return da
+
+
 
 def _lon_lat_arrays_nodes_only(ds: xr.Dataset) -> tuple[np.ndarray, np.ndarray]:
     """

@@ -29,6 +29,9 @@ from ..utils import (
     build_time_window_label, 
     depth_tag,
     nearest_index_for_dim,
+    resolve_da_with_depth,
+    is_absolute_z,
+
 )
 
 def _vprint(verbose: bool, *args, **kwargs):
@@ -97,13 +100,25 @@ def _align_art1_to_da(ds: xr.Dataset, da: xr.DataArray, verbose: bool=False) -> 
         return None
     # Let weighted_mean_std() handle detailed alignment
     return w
+    
+def _require_vertical(da: xr.DataArray, var: str, where: str = "", verbose: bool = True) -> bool:
+    """Return False (and print a clear message) if the array has no 'siglay' depth dim."""
+    if "siglay" not in da.dims:
+        if verbose:
+            dims = list(da.dims)
+            prefix = f"[{where}] " if where else ""
+            print(f"{prefix}Error: Var '{var}' has no depth dimension; dims={dims}. "
+                  "Cannot generate depth-differentiated (surface/bottom/profile) plots.")
+        return False
+    return True
+
 # ----------------- plotting functions -----------------
 
 def domain_mean_timeseries(
     ds: xr.Dataset,
     variables: List[str],
     *,
-    depth: Any,
+    depth: Any = "surface",                      # ← default to surface
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -116,7 +131,7 @@ def domain_mean_timeseries(
     dpi: int = 150,
     styles: Optional[Dict[str, Dict[str, Any]]] = None, 
     verbose: bool = True,
-    combine_by: Optional[str] = None,   # NEW: None | "var"
+    combine_by: Optional[str] = None,            # None | "var"
 ) -> None:
     """
     Plot domain-mean time series for one or more variables, with optional depth selection
@@ -124,57 +139,17 @@ def domain_mean_timeseries(
 
     Workflow
     --------
-    1. Depth selection: `select_depth(ds, depth)` (supports sigma modes, depth_avg, and absolute z).
-    2. Time filter: `filter_time(...)` using months/years/date bounds.
-    3. For each `var`, resolve the expression via `eval_group_or_var(ds2, var, groups)`.
-       If an absolute depth was requested (e.g., {"z_m": -10}), slice DA with `select_da_by_z(...)`.
-    4. Compute spatial mean over domain using `_space_mean(da, ds, ...)`.
-    5. Save a figure either per variable (default) or a combined multi-line figure if `combine_by="var"`.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Source dataset containing model fields and grid info.
-    variables : list of str
-        Variable or expression names to plot. Each is resolved through `groups` if provided.
-    depth : Any
-        Depth selector passed to `select_depth`, e.g. "surface", "bottom", "depth_avg",
-        sigma value, or absolute depth forms like -10.0 / ("z_m", -10.0) / {"z_m": -10.0}.
-    months, years : list[int], optional
-        Calendar months (1–12) and/or years to keep.
-    start_date, end_date : str, optional
-        Inclusive date bounds "YYYY-MM-DD".
-    base_dir : str
-        Run root; used to derive filename prefix via `file_prefix(base_dir)`.
-    figures_root : str
-        Root folder for figure outputs (subdirs created as needed).
-    groups : dict, optional
-        Global alias / expression mapping for variable resolution.
-    linewidth : float, default 1.5
-        Line width for plotted series.
-    figsize : tuple, default (10, 4)
-        Figure size in inches.
-    dpi : int, default 150
-        Output PNG resolution.
-    styles : dict, optional
-        Optional style dictionary. For each key (var name), you may provide:
-        {"line_color": <matplotlib color>, "line_width": <float>, ...}.
-        Accessed via `style_get(var, styles, "line_color", None)`.
-    verbose : bool, default True
-        If True, prints progress and skip reasons.
-    combine_by : {None, "var"}, optional
-        - None: one PNG per variable (default).
-        - "var": one PNG with all variables as separate lines.
-
-    Returns
-    -------
-    None
-        Figures are saved to disk. Filenames include scope=Domain, depth tag, and time window.
+    1) Time filter: `filter_time(...)` using months/years/date bounds.
+    2) For each `var`, resolve + depth-handle via `resolve_da_with_depth(...)`.
+       - If `var` has 'siglay', depth selection / abs-z is applied.
+       - If `var` is 2-D (time×node/nele), it is auto-lifted to a single 'siglay' layer.
+    3) Compute spatial mean over domain using `_space_mean(da, ds, ...)`.
+    4) Save per-variable figures, or a combined figure if `combine_by="var"`.
 
     Notes
     -----
     - Variables without a 'time' dimension are skipped.
-    - Absolute-depth slicing is applied per-variable after the time/depth-scope dataset is built.
+    - 2-D variables like `aice(time,node)` are supported transparently.
     """
     if combine_by not in (None, "var"):
         raise ValueError("domain_mean_timeseries: combine_by must be None or 'var'.")
@@ -186,21 +161,19 @@ def domain_mean_timeseries(
 
     _vprint(verbose, f"[domain] Start domain mean time series")
     _vprint(verbose, f"[domain] Depth={depth} -> tag='{tag}' | Time window='{label}'")
-    ds2 = filter_time(select_depth(ds, depth, verbose=verbose), months, years, start_date, end_date)
 
-    # collect all series first (so we can do combined plots)
+    #  time filter once up front (works for both 2-D and 3-D vars)
+    ds_t = filter_time(ds, months, years, start_date, end_date)
+
+    # collect series (so we can optionally combine into one plot)
     series: List[Tuple[str, pd.DatetimeIndex, np.ndarray]] = []
     for var in variables:
-        _vprint(verbose, f"[domain] Variable '{var}': resolving group/var…")
+        _vprint(verbose, f"[domain] Variable '{var}': resolving with depth handling…")
         try:
-            da = eval_group_or_var(ds2, var, groups)
-            # absolute z per-variable slice
-            if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
-                da = select_da_by_z(da, ds2, float(depth), verbose=verbose)
-            elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
-                da = select_da_by_z(da, ds2, float(depth[1]), verbose=verbose)
-            elif isinstance(depth, dict) and "z_m" in depth:
-                da = select_da_by_z(da, ds2, float(depth["z_m"]), verbose=verbose)
+            # ← unified resolver: handles 'surface'/'bottom'/abs-z AND 2-D fields
+            da = resolve_da_with_depth(
+                ds_t, var, depth=depth, groups=groups, verbose=verbose
+            )
         except Exception as e:
             _vprint(verbose, f"[domain] Skipping '{var}': {e}")
             continue
@@ -215,6 +188,7 @@ def domain_mean_timeseries(
         _vprint(verbose, "[domain] nothing to plot.")
         return
 
+    # render
     if combine_by == "var":
         fig, ax = plt.subplots(figsize=figsize)
         for (var, t, y) in series:
@@ -232,7 +206,7 @@ def domain_mean_timeseries(
     # default: one per variable
     for (var, t, y) in series:
         fig, ax = plt.subplots(figsize=figsize)
-        color = style_get(var, styles, "line_color", None)  
+        color = style_get(var, styles, "line_color", None)
         ax.plot(t, y, lw=linewidth, color=color)
         ax.set_title(f"{var} — Domain ({tag}, {label})")
         ax.set_xlabel("Time"); ax.set_ylabel(var)
@@ -248,7 +222,7 @@ def station_timeseries(
     variables: List[str],
     stations: List[Tuple[str, float, float]],   # (name, lat, lon)
     *,
-    depth: Any,
+    depth: Any = "surface",
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -338,58 +312,74 @@ def station_timeseries(
         _vprint(verbose, "[station] No stations provided; nothing to do.")
         return
 
-    ds2 = filter_time(select_depth(ds, depth, verbose=verbose), months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date)
 
     # map station -> nearest indices
     idx_map: Dict[str, Tuple[Optional[int], Optional[int]]] = {}
     for (name, lat, lon) in stations:
         try:
-            nidx = nearest_index_for_dim(ds2, lat, lon, "node")
+            nidx = nearest_index_for_dim(ds_t, lat, lon, "node")
         except Exception:
             nidx = None
         try:
-            eidx = nearest_index_for_dim(ds2, lat, lon, "nele")
+            eidx = nearest_index_for_dim(ds_t, lat, lon, "nele")
         except Exception:
             eidx = None
         idx_map[name] = (nidx, eidx)
 
     def one_series(var: str, st_name: str) -> Optional[Tuple[pd.DatetimeIndex, np.ndarray]]:
         node_idx, nele_idx = idx_map[st_name]
+    
+        # Build a dataset aligned to the station column first (node/element)
+        ds_for_z = ds_t
         try:
-            da = eval_group_or_var(ds2, var, groups)
+            # If the grid has nodes, prefer node column; else fall back to element column
+            if "node" in ds_t.dims and node_idx is not None:
+                ds_for_z = ds_for_z.isel(node=node_idx)
+            elif "nele" in ds_t.dims and nele_idx is not None:
+                ds_for_z = ds_for_z.isel(nele=nele_idx)
+        except Exception:
+            pass  # keep ds_for_z as ds_t if selection not possible
+    
+        try:
+            if is_absolute_z(depth):
+                # ABSOLUTE-Z: eval first (3D if available), lift if 2D, then slice by z
+                da = eval_group_or_var(ds_for_z, var, groups)
+                if "siglay" not in da.dims:
+                    sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
+                    da = da.expand_dims(siglay=sig)
+                    da["siglay"] = sig
+                # derive numeric target_z
+                if isinstance(depth, (float, np.floating, int)):
+                    target_z = float(depth)
+                elif isinstance(depth, tuple):
+                    target_z = float(depth[1])
+                else:  # dict {"z_m": ...}
+                    target_z = float(depth["z_m"])
+                da = select_da_by_z(da, ds_for_z, target_z, verbose=verbose)
+            else:
+                # SURFACE / BOTTOM / DEPTH-AVG / SIGMA-INDEX:
+                # do depth selection on the *dataset*, THEN evaluate the expression
+                ds_depth = select_depth(ds_for_z, depth, verbose=verbose)
+                da = eval_group_or_var(ds_depth, var, groups)
+    
+            # Ensure we have a time dimension
+            if "time" not in da.dims:
+                _vprint(verbose, f"[station:{st_name}] '{var}' has no 'time'; skip.")
+                return None
+    
+            # If this DA still has a spatial dim (node/nele) after column selection, squeeze it out
+            for d in ("node", "nele"):
+                if d in da.dims and da.sizes.get(d, 1) == 1:
+                    da = da.isel({d: 0})
+    
+            return _time_index(da), da.values
+    
         except Exception as e:
             _vprint(verbose, f"[station:{st_name}] Skip '{var}': {e}")
             return None
 
-        # spatial slice
-        if "node" in da.dims and node_idx is not None:
-            da = da.isel(node=node_idx)
-        elif "nele" in da.dims and nele_idx is not None:
-            da = da.isel(nele=nele_idx)
-        else:
-            _vprint(verbose, f"[station:{st_name}] No spatial dim; using as-is.")
 
-        # Build a dataset aligned to the current spatial selection
-        ds_for_z = ds2
-        if "node" in da.dims and node_idx is not None:
-            ds_for_z = ds_for_z.isel(node=node_idx)
-        elif "nele" in da.dims and nele_idx is not None:
-            ds_for_z = ds_for_z.isel(nele=nele_idx)
-        
-        # absolute z slice (after spatial selection)
-        if "siglay" in da.dims:  # only try if there is a vertical dim
-            if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
-                da = select_da_by_z(da, ds_for_z, float(depth), verbose=verbose)
-            elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
-                da = select_da_by_z(da, ds_for_z, float(depth[1]), verbose=verbose)
-            elif isinstance(depth, dict) and "z_m" in depth:
-                da = select_da_by_z(da, ds_for_z, float(depth["z_m"]), verbose=verbose)
-
-
-        if "time" not in da.dims:
-            _vprint(verbose, f"[station:{st_name}] '{var}' has no 'time'; skip.")
-            return None
-        return _time_index(da), da.values
 
     # combine_by='station' → per variable, lines = stations
     if combine_by == "station":
@@ -457,13 +447,12 @@ def station_timeseries(
             plt.close(fig)
             _vprint(verbose, f"[station] Saved: {path}")
 
-
 def region_timeseries(
     ds: xr.Dataset,
     variables: List[str],
     regions: List[Tuple[str, Dict[str, Any]]],   # (region_name, spec)
     *,
-    depth: Any,
+    depth: Any = "surface",
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -479,61 +468,11 @@ def region_timeseries(
     combine_by: Optional[str] = None,            # None | "var" | "region"
 ) -> None:
     """
-    Plot region-mean time series using polygon masks (shapefile or CSV boundary),
-    with optional depth selection and time filtering.
-
-    For each region and variable, applies a spatial mask, computes area-weighted
-    (if possible) or simple spatial means per time step, and saves figures grouped
-    according to `combine_by`.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Source dataset. Must contain 'lon' and 'lat' for region masking.
-    variables : list of str
-        Variable or expression names to plot.
-    regions : list of (str, dict)
-        Regions as (region_name, spec). `spec` must define either:
-          - {"shapefile": <path>, "name_field": ..., "name_equals": ...} or
-          - {"csv_boundary": <path>, "lon_col": "lon", "lat_col": "lat"}
-    depth : Any
-        Depth selector ("surface", "bottom", "depth_avg", sigma, or absolute z).
-    months, years : list[int], optional
-        Time filters.
-    start_date, end_date : str, optional
-        Inclusive date bounds.
-    base_dir : str
-        Run root for filename prefixing.
-    figures_root : str
-        Output root directory.
-    groups : dict, optional
-        Alias/expression map used by `eval_group_or_var`.
-    linewidth : float, default 1.5
-        Line width for plotting.
-    figsize : tuple, default (10, 4)
-        Figure size in inches.
-    dpi : int, default 150
-        PNG resolution.
-    styles : dict, optional
-        Optional style dictionary. Keys can be variable names (for `combine_by="var"`)
-        or region names (for `combine_by="region"`), providing `"line_color"` etc.
-    verbose : bool, default True
-        Print progress, mask sizes, and skip reasons.
-    combine_by : {None, "var", "region"}, optional
-        - None: one PNG per (region × variable).
-        - "var": one PNG per region; lines = variables.
-        - "region": one PNG per variable; lines = regions.
-
-    Returns
-    -------
-    None
-        Figures saved to disk. Filenames encode region, depth, and time window.
-
-    Notes
-    -----
-    - Spatial means/std are area-weighted if `art1` is available and alignable; otherwise simple means.
-    - Absolute-depth slicing is applied after spatial masking to maintain vertical alignment.
-    - Regions yielding empty masks are skipped with a verbose message.
+    Region-mean time series using polygon masks (shapefile or CSV boundary).
+    Supports both 3-D (time×siglay×space) and 2-D (time×space) variables.
+    For 2-D vars, auto-lifts to a single 'siglay' layer so depth logic is uniform.
+    Vertical selection (surface/bottom/depth_avg/sigma/absolute-z) is applied
+    AFTER masking the region (important for absolute-z).
     """
     if combine_by not in (None, "var", "region"):
         raise ValueError("region_timeseries: combine_by must be None, 'var', or 'region'.")
@@ -549,12 +488,28 @@ def region_timeseries(
     _vprint(verbose, f"[region] Start region time series for {len(regions)} region(s)")
     _vprint(verbose, f"[region] Depth={depth} -> tag='{tag}' | Time window='{label}'")
 
-    # time filter and (non-absolute) depth modes
-    ds2 = filter_time(select_depth(ds, depth, verbose=verbose), months, years, start_date, end_date)
+    # Time filter once; depth is handled per-var AFTER masking.
+    ds_t = filter_time(ds, months, years, start_date, end_date)
 
     # ---------- helper: one (region × variable) series ----------
-    def region_series(region_name: str, spec: Dict[str, Any], var: str) -> Optional[Tuple[pd.DatetimeIndex, np.ndarray]]:
-        # Build node mask (and element mask if topology present)
+    def region_series(region_name: str, spec: Dict[str, Any], var: str
+                      ) -> Optional[Tuple[pd.DatetimeIndex, np.ndarray]]:
+        """
+        Build a single time series for one (region × variable), applying:
+          1) polygon masking (nodes/elements),
+          2) vertical selection (surface/bottom/depth_avg/sigma or absolute-z),
+          3) spatial mean over the masked area (area-weighted if possible).
+
+        2-D inputs (time×node/nele) are auto-lifted to a single 'siglay' layer
+        so vertical logic is uniform.
+
+        Returns
+        -------
+        (pd.DatetimeIndex, np.ndarray) or None:
+            Time index and region-mean values; or None if the mask is empty,
+            variable missing, or the result has no 'time' dimension.
+        """
+        # --- Build node mask (and element mask if topology present) ---
         try:
             if "shapefile" in spec:
                 mask_nodes = polygon_mask_from_shapefile(
@@ -581,43 +536,63 @@ def region_timeseries(
 
         mask_elems = element_mask_from_node_mask(ds, mask_nodes)
 
-        # Resolve group/variable
+        # --- Resolve variable/expression without depth first ---
         try:
-            da = eval_group_or_var(ds2, var, groups)
+            da = eval_group_or_var(ds_t, var, groups)
         except Exception as e:
             _vprint(verbose, f"[region:{region_name}] '{var}' missing: {e}")
             return None
 
-        # Apply region mask to DA and build matching DS subset for absolute-z slicing
-        ds2_sub = ds2
+        # --- Lift 2-D fields to a single 'siglay' layer ---
+        if "siglay" not in da.dims:
+            _vprint(verbose, f"[region:{region_name}] '{var}' has no 'siglay' — lifting to single layer.")
+            sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
+            da = da.expand_dims(siglay=sig)
+            da["siglay"] = sig
+
+        # --- Apply region mask and build column-aligned dataset subset ---
+        ds_sub = ds_t
         if "node" in da.dims:
             idx_nodes = np.where(mask_nodes)[0]
-            da = da.isel(node=idx_nodes)
-            ds2_sub = ds2_sub.isel(node=idx_nodes)
+            da     = da.isel(node=idx_nodes)
+            ds_sub = ds_sub.isel(node=idx_nodes)
         elif "nele" in da.dims and mask_elems is not None:
             idx_elems = np.where(mask_elems)[0]
-            da = da.isel(nele=idx_elems)
-            ds2_sub = ds2_sub.isel(nele=idx_elems)
-        # else: no spatial dim → keep ds2_sub as ds2
+            da     = da.isel(nele=idx_elems)
+            ds_sub = ds_sub.isel(nele=idx_elems)
 
-        # Absolute-z slice (only if vertical dim exists), using the aligned ds2_sub
+        # --- Vertical selection on the masked subset ---
         if "siglay" in da.dims:
-            if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
-                da = select_da_by_z(da, ds2_sub, float(depth), verbose=verbose)
-            elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
-                da = select_da_by_z(da, ds2_sub, float(depth[1]), verbose=verbose)
-            elif isinstance(depth, dict) and "z_m" in depth:
-                da = select_da_by_z(da, ds2_sub, float(depth["z_m"]), verbose=verbose)
+            # ensure the DA has a usable name (expressions often produce name=None)
+            if da.name is None:
+                da = da.rename(var)
 
-        # Spatial mean (area-weighted if 'art1' is available & alignable)
-        m = _space_mean(da, ds, verbose=verbose)
-        if "time" not in m.dims:
+            if is_absolute_z(depth):
+                # numeric target z (float)
+                if isinstance(depth, (float, np.floating, int)):
+                    target_z = float(depth)
+                elif isinstance(depth, tuple):
+                    target_z = float(depth[1])
+                else:  # dict {"z_m": ...}
+                    target_z = float(depth["z_m"])
+                da = select_da_by_z(da, ds_sub, target_z, verbose=verbose)
+            else:
+                # surface / bottom / depth_avg / sigma index
+                # operate on a temporary dataset built from the DA to avoid name=None bugs
+                ds_tmp   = da.to_dataset(name=da.name)
+                ds_depth = select_depth(ds_tmp, depth, verbose=verbose)
+                da       = ds_depth[da.name]
+
+        # --- Must have time dimension before reducing ---
+        if "time" not in da.dims:
             _vprint(verbose, f"[region:{region_name}] '{var}' has no 'time'; skip.")
             return None
 
+        # --- Spatial mean (area-weighted if possible) ---
+        m = _space_mean(da, ds, verbose=verbose)   # <-- THIS was missing; caused NameError
         return _time_index(m), m.values
 
-    # ---------- combine_by='var' → per region, lines = variables ----------
+    # ---------- combine_by='var' → one plot per region, lines = variables ----------
     if combine_by == "var":
         for (region_name, spec) in regions:
             plotted = []
@@ -642,7 +617,7 @@ def region_timeseries(
             _vprint(verbose, f"[region:{region_name}] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # ---------- combine_by='region' → per variable, lines = regions ----------
+    # ---------- combine_by='region' → one plot per variable, lines = regions ----------
     if combine_by == "region":
         for var in variables:
             series = []
@@ -667,7 +642,7 @@ def region_timeseries(
             _vprint(verbose, f"[region] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # ---------- default: one per (region × variable) ----------
+    # ---------- default: one PNG per (region × variable) ----------
     for (region_name, spec) in regions:
         for var in variables:
             s = region_series(region_name, spec, var)
@@ -684,7 +659,6 @@ def region_timeseries(
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
             plt.close(fig)
             _vprint(verbose, f"[region:{region_name}] Saved: {path}")
-
 
 def _plot_three_panel(
     *,
@@ -877,6 +851,16 @@ def domain_three_panel(
 
     for var in variables:
         try:
+            # check the raw (unsliced) field for a vertical dimension first
+            da_raw = eval_group_or_var(ds_t, var, groups)
+        except Exception as e:
+            print(f"[3panel/domain] Skip '{var}': {e}")
+            continue
+    
+        if not _require_vertical(da_raw, var, where="3panel/domain", verbose=verbose):
+            continue
+
+        try:
             # Surface & bottom time series: spatial dims only reduced per timestep
             da_surf = eval_group_or_var(select_depth(ds_t, "surface"), var, groups)
             da_bott = eval_group_or_var(select_depth(ds_t, "bottom"),  var, groups)
@@ -991,6 +975,15 @@ def station_three_panel(
 
     for (name, lat, lon) in stations:
         for var in variables:
+            try:
+                # check raw field first for a vertical dim
+                da_raw = eval_group_or_var(ds_t, var, groups)
+            except Exception as e:
+                print(f"[3panel/station {name}] Skip '{var}': {e}")
+                continue
+    
+            if not _require_vertical(da_raw, var, where=f"3panel/station {name}", verbose=verbose):
+                continue
             try:
                 da_surf = eval_group_or_var(select_depth(ds_t, "surface"), var, groups)
                 da_bott = eval_group_or_var(select_depth(ds_t, "bottom"),  var, groups)
@@ -1159,6 +1152,14 @@ def region_three_panel(
 
         for var in variables:
             # --- Resolve variables at required depths + full for profile ---
+            try:
+                da_raw = eval_group_or_var(ds_t, var, groups)
+            except Exception as e:
+                print(f"[3panel/region {region_name}] Skip '{var}': {e}")
+                continue
+        
+            if not _require_vertical(da_raw, var, where=f"3panel/region {region_name}", verbose=verbose):
+                continue
             try:
                 da_surf = eval_group_or_var(select_depth(ds_t, "surface"), var, groups)
                 da_bott = eval_group_or_var(select_depth(ds_t, "bottom"),  var, groups)

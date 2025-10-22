@@ -326,6 +326,23 @@ def main():
         styles=PLOT_STYLES,
         dpi=150,
     )
+    
+    # 2D variables
+    info(" Example 4 : Dealing with 2d variables")
+    bullet("We can also plot variables without a depth dimension i.e. aice (time,node) on domain, region and timeseries plots")
+    bullet("just skip adding a depth field to the call")
+
+    plot_call(
+        region_timeseries,
+        ds=ds,
+        variables=["aice"],
+        regions=REGIONS,                             # multiple regions
+        years=[2018], months=[4,5,6,7,8,9,10],
+        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        groups=GROUPS, styles=PLOT_STYLES,
+        combine_by="region",
+        verbose=False,
+    )
 
     # --- 3-panel demos ---
     info("Example 4: Three-pane plots (Surface ±1σ, Bottom ±1σ, Profile mean  ±1σ): Domain/Station/Region")
@@ -334,9 +351,9 @@ def main():
     plot_call(
         domain_three_panel,
         ds=ds,
-        variables=["DOC"],
+        variables=["DOC","aice"],
         base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,styles=PLOT_STYLES,
-        months=None, years=None, start_date=None, end_date=None,  # full span
+        months=None, years=None, start_date=None, end_date=None, verbose=True  # full span
     )
     
     bullet("\n[3-panel / Station WE12] Chl, full run")
@@ -360,7 +377,7 @@ def main():
 
     # 
     # --- Specific-depth selections (shorthand + longhand)
-    info("Example 5: Plotting at a specific depth")
+    info("Example 6: Plotting at a specific depth")
     
     #   Shorthand:
     #     depth=5        -> select sigma layer index k=5              == ("siglay_index", 5)
