@@ -54,7 +54,7 @@ REGIONS = [
 #        "csv_boundary": "/data/proteus1/backup/rito/Models/FVCOM/fvcom-projects/erie/python/postprocessing/west_stations.csv",
 #        "lon_col": "lon", 
 #        "lat_col": "lat",
-#        "convex_hull": True,   # <— wrap points
+#        "convex_hull": True,   # <- wrap points
 #        # "sort": "auto",      # (use this if your CSV is a boundary but unordered)
 #    }),
 ]   
@@ -102,11 +102,11 @@ def main():
     # ===============================================================
 
     # Domain, SURFACE, time-mean, per-var cmap from styles
-    bullet("\n Domain mean maps at SURFACE (DOC, chl) — colour-by-var")
+    bullet("\n Domain mean maps at SURFACE (DOC, chl) - colour-by-var")
     plot_call(
         domain_map,
         ds=ds,
-        variables=["DOC", "chl", "temp"],
+        variables=["DOC", "aice"],
         depth="surface",
         base_dir=BASE_DIR, figures_root=FIG_DIR,
         groups=GROUPS,
@@ -118,7 +118,7 @@ def main():
     )
 
     # Domain, BOTTOM, instantaneous at two timestamps
-    bullet("\n Domain instantaneous maps at BOTTOM (phyto) — two timestamps")
+    bullet("\n Domain instantaneous maps at BOTTOM (phyto) - two timestamps")
     plot_call(
         domain_map,
         ds=ds,
@@ -134,8 +134,8 @@ def main():
         verbose=False,
     )
 
-    # Domain, absolute z depth (e.g., z = -8 m), Apr–Oct 2018
-    bullet("\n Domain mean at ABSOLUTE depth z = -8 m (phyto), Apr–Oct 2018")
+    # Domain, absolute z depth (e.g., z = -8 m), Apr-Oct 2018
+    bullet("\n Domain mean at ABSOLUTE depth z = -8 m (phyto), Apr-Oct 2018")
     plot_call(
         domain_map,
         ds=ds,
@@ -214,6 +214,24 @@ def main():
         dpi=150, figsize=(8, 6),
         verbose=False,
     )
+
+    #  Region (East), 2D var
+    bullet("\n Region=EAST, plotting a 2d var (aice)")
+    plot_call(
+        region_map,
+        ds=ds,
+        variables=["aice"],
+        regions=[REGIONS[1]],       # East
+        at_time="2018-08-15 00:00",
+        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        groups=GROUPS,
+        styles=PLOT_STYLES,
+        grid_on=True,
+        dpi=150, figsize=(8, 6),
+        verbose=False,
+    )
+
+    
 
     print("\nDone. Maps written under:", out_folder)
 

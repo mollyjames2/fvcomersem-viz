@@ -24,6 +24,8 @@ from ..utils import (
     select_da_by_z,
     build_time_window_label,
     depth_tag,
+    resolve_da_with_depth,
+    is_absolute_z,
 )
 from ..regions import (
     polygon_mask_from_shapefile,
@@ -121,7 +123,7 @@ def domain_map(
     ds: xr.Dataset,
     variables: List[str],
     *,
-    depth: Any,
+    depth: Any = "surface",
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -143,13 +145,16 @@ def domain_map(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
     """
-    Render domain-wide maps (triangular mesh) for one or more variables at a chosen
-    depth and time window, saving either **instantaneous** snapshots or the **time mean**.
-
+    Render domain-wide maps for one or more variables at a chosen depth and time window, 
+    saving either **instantaneous** snapshots or the **time mean**
+    Handles 3-D (time×siglay×space) and 2-D (time×space) fields. 2-D fields are auto-lifted
+    to a single 'siglay' so vertical logic (surface/bottom/depth_avg/abs-z) works uniformly.
+    Absolute-z is applied per variable after time filtering.
+    
     Workflow
     --------
     1. Depth selection: `select_depth(ds, depth)` (supports sigma keywords, depth-avg,
-       and absolute depth via z meters, negative downward).
+       and absolute depth via z meters, negative downward). defaults to surface - can be omitted for 2D runs
     2. Time filter: `filter_time(...)` using months/years/date bounds.
     3. For each variable:
        a. Resolve via `eval_group_or_var(ds_t, var, groups)`.
@@ -232,8 +237,10 @@ def domain_map(
     - If `ds` lacks 'nv', triangulation falls back to Delaunay using available coordinates.
     - Color scaling priority: `norm` > (vmin/vmax in styles) > `clim` > robust percentiles.
     """
-    ds_depth = select_depth(ds, depth, verbose=verbose)
-    ds_t = filter_time(ds_depth, months, years, start_date, end_date)
+    
+    # Time filter first; per-var depth is handled by resolve_da_with_depth
+    ds_t = filter_time(ds, months, years, start_date, end_date)
+
     label_window = build_time_window_label(months, years, start_date, end_date)
     tag = depth_tag(depth)
     outdir = out_dir(base_dir, figures_root)
@@ -243,15 +250,9 @@ def domain_map(
     desired = _timepoints_to_list(at_time, at_times)
 
     for var in variables:
+        # unified resolver (handles lifting + surface/bottom/depth_avg/abs-z)
         try:
-            da = eval_group_or_var(ds_t, var, groups)
-            # absolute depth selection (meters, negative downward)
-            if (isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0)):
-                da = select_da_by_z(da, ds_t, float(depth), verbose=verbose)
-            elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
-                da = select_da_by_z(da, ds_t, float(depth[1]), verbose=verbose)
-            elif isinstance(depth, dict) and "z_m" in depth:
-                da = select_da_by_z(da, ds_t, float(depth["z_m"]), verbose=verbose)
+            da = resolve_da_with_depth(ds_t, var, depth=depth, groups=groups, verbose=verbose)
         except Exception as e:
             print(f"[maps/domain] Skip '{var}': {e}")
             continue
@@ -314,7 +315,7 @@ def region_map(
     variables: List[str],
     regions: List[Tuple[str, Dict[str, Any]]],
     *,
-    depth: Any,
+    depth: Any = "surface",
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -336,6 +337,10 @@ def region_map(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
     """
+    Region-masked maps for one or more variables at a chosen depth and time window.
+    Handles 3-D and 2-D fields. 2-D fields are auto-lifted; vertical selection is
+    applied **after** masking (for absolute-z correctness).
+    
     Render **region-masked** maps for one or more variables at a chosen depth and
     time window, saving instantaneous snapshots or the time mean for each region.
 
@@ -372,7 +377,7 @@ def region_map(
     depth : Any
         Depth selector passed to `select_depth` (sigma keywords, depth_avg, sigma value,
         or absolute z forms). Absolute depth refinement is applied per-variable.
-    months, years : list[int], optional
+    months, years : list[int], optional. default surface - can be omitted for 2D vars
         Calendar-based time filters.
     start_date, end_date : str, optional
         Inclusive date bounds "YYYY-MM-DD".
@@ -426,12 +431,14 @@ def region_map(
         'nv' is needed to derive it).
     - Color scaling is computed from **in-region** values only (after masking).
     - If a region mask is empty or a variable lacks required dims, that plot is skipped.
+    
     """
     if "lon" not in ds or "lat" not in ds:
         raise ValueError("Dataset must contain 'lon' and 'lat' for region masking.")
 
-    ds_depth = select_depth(ds, depth, verbose=verbose)
-    ds_t = filter_time(ds_depth, months, years, start_date, end_date)
+    # Time filter first; depth is handled per-var on masked subsets
+    ds_t = filter_time(ds, months, years, start_date, end_date)
+
     label_window = build_time_window_label(months, years, start_date, end_date)
     tag = depth_tag(depth)
     outdir = out_dir(base_dir, figures_root)
@@ -471,18 +478,52 @@ def region_map(
         mask_elems = element_mask_from_node_mask(ds, mask_nodes)
 
         for var in variables:
+            # 1) evaluate without depth; 2) lift if needed
             try:
                 da = eval_group_or_var(ds_t, var, groups)
-                # absolute depth selection (meters, negative downward)
-                if (isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0)):
-                    da = select_da_by_z(da, ds_t, float(depth), verbose=verbose)
-                elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
-                    da = select_da_by_z(da, ds_t, float(depth[1]), verbose=verbose)
-                elif isinstance(depth, dict) and "z_m" in depth:
-                    da = select_da_by_z(da, ds_t, float(depth["z_m"]), verbose=verbose)
             except Exception as e:
                 print(f"[maps/region {region_name}] Skip '{var}': {e}")
                 continue
+            if "siglay" not in da.dims:
+                if verbose:
+                    print(f"[maps/region {region_name}] '{var}' has no 'siglay' — lifting to single layer.")
+                sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
+                da = da.expand_dims(siglay=sig)
+                da["siglay"] = sig
+
+            # 3) apply region mask and build an aligned ds_sub (column subset)
+            ds_sub = ds_t
+            center = "node" if "node" in da.dims else ("nele" if "nele" in da.dims else None)
+            if center is None:
+                print(f"[maps/region {region_name}] '{var}' has no 'node' or 'nele' dim; skipping.")
+                continue
+            if center == "node":
+                idx_nodes = np.where(mask_nodes)[0]
+                da     = da.isel(node=idx_nodes)
+                ds_sub = ds_sub.isel(node=idx_nodes)
+            else:
+                if mask_elems is None:
+                    print(f"[maps/region {region_name}] element-centered map requires 'nv' (cannot mask elements).")
+                    continue
+                idx_elems = np.where(mask_elems)[0]
+                da     = da.isel(nele=idx_elems)
+                ds_sub = ds_sub.isel(nele=idx_elems)
+
+            # 4) vertical selection on masked subset
+            if da.name is None:
+                da = da.rename(var)
+            if is_absolute_z(depth):
+                if isinstance(depth, (float, np.floating, int)):
+                    target_z = float(depth)
+                elif isinstance(depth, tuple):
+                    target_z = float(depth[1])
+                else:
+                    target_z = float(depth["z_m"])
+                da = select_da_by_z(da, ds_sub, target_z, verbose=verbose)
+            else:
+                ds_tmp   = da.to_dataset(name=da.name)
+                ds_depth = select_depth(ds_tmp, depth, verbose=verbose)
+                da       = ds_depth[da.name]
 
             # Per-var style overrides
             cmap_eff   = style_get(var, styles, "cmap", cmap)
@@ -491,25 +532,27 @@ def region_map(
             vmax_style = style_get(var, styles, "vmax", None)
             shading_eff= style_get(var, styles, "shading", shading)
 
-            center = "node" if "node" in da.dims else ("nele" if "nele" in da.dims else None)
-            if center is None:
-                print(f"[maps/region {region_name}] '{var}' has no 'node' or 'nele' dim; skipping.")
-                continue
-
+            # --- inside region_map, replace make_masked_full() ---
             def make_masked_full(values_full: np.ndarray) -> Tuple[np.ndarray, Optional[Tuple[float, float]]]:
-                """Mask outside region and compute clim (from in-region values) if needed."""
+                """
+                values_full is the region-subset array (len == len(idx_nodes) or len(idx_elems)).
+                Rebuild a full-domain array and compute clim from the in-region values.
+                """
                 if center == "node":
-                    full = np.array(values_full, dtype=float).copy()
-                    full[~mask_nodes] = np.nan
-                    v_in = values_full[mask_nodes]
+                    # full domain length
+                    n_nodes = int(ds.dims["node"])
+                    full = np.full(n_nodes, np.nan, dtype=float)
+                    # put region values back into their original node slots
+                    full[idx_nodes] = values_full
+                    v_in = values_full  # already only in-region
                 else:
-                    if mask_elems is None:
-                        raise RuntimeError("Element-centered region map requires 'nv' to make element mask.")
-                    full = np.array(values_full, dtype=float).copy()
-                    full[~mask_elems] = np.nan
-                    v_in = values_full[mask_elems]
-
+                    n_elems = int(ds.dims["nele"])
+                    full = np.full(n_elems, np.nan, dtype=float)
+                    full[idx_elems] = values_full
+                    v_in = values_full  # already only in-region
+            
                 v_in = v_in[np.isfinite(v_in)]
+            
                 if norm_eff is not None:
                     clim_eff = None
                 else:
@@ -518,11 +561,10 @@ def region_map(
                     elif clim is not None:
                         clim_eff = clim
                     else:
-                        if v_in.size == 0:
-                            clim_eff = (0.0, 1.0)
-                        else:
-                            clim_eff = robust_clims(v_in, q=robust_q)
+                        clim_eff = (0.0, 1.0) if v_in.size == 0 else robust_clims(v_in, q=robust_q)
+            
                 return full, clim_eff
+            
 
             if desired:
                 for chosen, inst in _choose_instants(da, desired, method=time_method):
@@ -565,3 +607,4 @@ def region_map(
                         title=title, cbar_label=var, fname=fname, dpi=dpi,
                         figsize=figsize, shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
                     )
+

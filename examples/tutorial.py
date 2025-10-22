@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# FVCOM–ERSEM Visualisation Tutorial (using `fvcomersem-viz`)
+# FVCOM-ERSEM Visualisation Tutorial (using `fvcomersem-viz`)
 # 
-# Welcome! This notebook demonstrates how to make clear, reproducible figures from FVCOM–ERSEM model output using the lightweight, function-first plotting toolkit`fvcomersem-viz`. The package keeps the API simple (plain Python functions, no GUI) and ships with focused plotting routines and helpers so you can go from raw NetCDF to publication-ready graphics quickly.
+# Welcome! This notebook demonstrates how to make clear, reproducible figures from FVCOM-ERSEM model output using the lightweight, function-first plotting toolkit`fvcomersem-viz`. The package keeps the API simple (plain Python functions, no GUI) and ships with focused plotting routines and helpers so you can go from raw NetCDF to publication-ready graphics quickly.
 # 
 # ---
 # 
-# What you’ll learn here
+# What you'll learn here
 # 
 #   How to point the toolkit at your FVCOM output** (single file or collections).
 #   How to make:
@@ -26,11 +26,11 @@
 # 
 # What this script expects
 # 
-#  Model data: FVCOM–ERSEM NetCDF output (can take single or multiple files)
+#  Model data: FVCOM-ERSEM NetCDF output (can take single or multiple files)
 #  Optional region definitions: shapefiles or CSV polygons 
 #  Optional station list: for point-based analysis
 # 
-# > If your paths differ from the examples, just edit the `BASE_DIR`, `FILE_PATTERN`, and any region/station paths in the “Setup” cells.
+# > If your paths differ from the examples, just edit the `BASE_DIR`, `FILE_PATTERN`, and any region/station paths in the "Setup" cells.
 # 
 # ---
 # 
@@ -39,14 +39,14 @@
 # Name: fvcomersem-viz
 #   Key modules:
 # 
-#    plots/maps.py – maps of scalar fields on the FVCOM grid
-#    plots/hovmoller.py – along-time/along-depth sections at stations
-#    plots/timeseries.py – single or multi-variable time series & composites
-#    plots/kde_stoichiometry.py – 2×2 stoichiometry panels
+#    plots/maps.py - maps of scalar fields on the FVCOM grid
+#    plots/hovmoller.py - along-time/along-depth sections at stations
+#    plots/timeseries.py - single or multi-variable time series & composites
+#    plots/kde_stoichiometry.py - 2x2 stoichiometry panels
 #    plots/composition.py, - visualises the composition of grouped communities (e.g., phytoplankton or zooplankton) as relative shares across time/space.
 #    plots/curves.py - builds reusable diagnostic curves 
 #    plots/animate.py - creates animations of timeseries and map plots
-#    io.py, regions.py, utils.py, plot.py – data discovery, time/depth filters, masks, labels, plotting functions
+#    io.py, regions.py, utils.py, plot.py - data discovery, time/depth filters, masks, labels, plotting functions
 # 
 # ---
 # 
@@ -71,7 +71,7 @@
 # 2. Install fvcomersem-viz from GitHub:
 #    pip install "git+https://github.com/mollyjames2/fvcomersem-viz.git"
 #
-#    # or, if you’ve cloned the repo locally (for development):
+#    # or, if you've cloned the repo locally (for development):
 #    git clone https://github.com/mollyjames2/fvcomersem-viz.git
 #    cd fvcomersem-viz
 #    pip install -e .    # editable/development mode
@@ -88,7 +88,7 @@
 # ------------------------------------------------------------
 # Notes
 # ------------------------------------------------------------
-# - The package depends on a working FVCOM or FVCOM–ERSEM model output dataset.
+# - The package depends on a working FVCOM or FVCOM-ERSEM model output dataset.
 # - If using regional masking or shapefile overlays, install the optional geospatial libs.
 # - Always activate your environment before running analysis scripts:
 #     conda activate fviz
@@ -132,14 +132,14 @@
 #     Produce single or multi-variable time series, monthly/seasonal climatologies, and box-region averages.
 # 
 #   Stoichiometry and diagnostics:
-#     Generate 2×2 KDE panels or scatter plots to explore relationships between model tracers (e.g., N:C, P:C ratios, oxygen vs temperature).
+#     Generate 2x2 KDE panels or scatter plots to explore relationships between model tracers (e.g., N:C, P:C ratios, oxygen vs temperature).
 # 
 #   Variable groups and expressions:
 #     Access groups like phyto, zoo, nutrients, or define on-the-fly algebraic combinations (e.g., total chlorophyll or N:P).
 # 
 # Typical use cases
 # 
-#   Generating consistent visual outputs across multiple FVCOM–ERSEM experiments.
+#   Generating consistent visual outputs across multiple FVCOM-ERSEM experiments.
 # 
 #   Producing diagnostics or summary figures for reports and publications.
 # 
@@ -153,12 +153,12 @@
 
 # Setting up your data paths
 # 
-#   In this section, we tell the notebook where to find the FVCOM–ERSEM model output and where to save plots.
+#   In this section, we tell the notebook where to find the FVCOM-ERSEM model output and where to save plots.
 # 
 #   You can configure everything by editing a few key variables:
 #             
-# BASE_DIR → the folder where your FVCOM–ERSEM NetCDF files live.
-# This should point to the root of your model output directory — the location of all NETCDF output files.
+# BASE_DIR → the folder where your FVCOM-ERSEM NetCDF files live.
+# This should point to the root of your model output directory - the location of all NETCDF output files.
 # 
 # FILE_PATTERN → the naming pattern for your files. 
 # This pattern uses wildcards (? or *) to match all relevant NetCDF files you want to load together.# 
@@ -173,12 +173,12 @@
 # 
 # You can override or disable that behaviour using the variable FVCOM_PLOT_SUBDIR:
 #
-# FVCOM_PLOT_SUBDIR = "project" # force all plots into a folder called “project”.
+# FVCOM_PLOT_SUBDIR = "project" # force all plots into a folder called "project".
 # FVCOM_PLOT_SUBDIR = "" # disable subfolders; save everything directly into FIG_DIR.
 # 
 # 
 # 
-# Tip: keeping these paths and patterns together makes it easy to reuse the same notebook for different model runs — just edit BASE_DIR, FILE_PATTERN, and (optionally) FIG_DIR at the top.
+# Tip: keeping these paths and patterns together makes it easy to reuse the same notebook for different model runs - just edit BASE_DIR, FILE_PATTERN, and (optionally) FIG_DIR at the top.
 # 
 
 #------ Set the filepaths here
@@ -194,7 +194,7 @@ FIG_DIR      = "/data/proteus1/scratch/moja/projects/Lake_Erie/fviz-plots/tutori
 
 # Subsampling for Regional and Station Plots
 # 
-#   To focus on specific areas or points within the FVCOM–ERSEM domain, we can subsample the dataset using simple metadata that defines stations (points) and regions (polygons).
+#   To focus on specific areas or points within the FVCOM-ERSEM domain, we can subsample the dataset using simple metadata that defines stations (points) and regions (polygons).
 # 
 
 # 
@@ -235,7 +235,7 @@ REGIONS = [
     }),
 ]
   
-# Using these simple definitions, the plotting functions automatically extract the relevant subset of model data — either at the nearest node (for stations) or within a polygon mask (for regions) — before generating plots or summary statistics.
+# Using these simple definitions, the plotting functions automatically extract the relevant subset of model data - either at the nearest node (for stations) or within a polygon mask (for regions) - before generating plots or summary statistics.
 
 
 # ---
@@ -356,7 +356,7 @@ kv("Filename prefix", prefix)
 
 # Time-Series Overview
 # --------------------
-# Tools to extract and plot FVCOM–ERSEM time series at three scopes:
+# Tools to extract and plot FVCOM-ERSEM time series at three scopes:
 # - Domain: area-weighted mean across the full grid.
 # - Region: mean over a polygon (from shapefile or CSV boundary).
 # - Station: series at the nearest model node to each (lat, lon).
@@ -397,7 +397,7 @@ if plot_timeseries:
   # Each parameter below is annotated with what it does and accepted values.
   
   # def domain_mean_timeseries(
-  #     ds: xr.Dataset,                      # The opened FVCOM–ERSEM dataset (e.g., from load_from_base()).
+  #     ds: xr.Dataset,                      # The opened FVCOM-ERSEM dataset (e.g., from load_from_base()).
   #     variables: List[str],                # One or more variable names to plot. Each entry can be:
   #                                          #   • a native variable in ds (e.g., "temp", "P1_c"), or
   #                                          #   • a group name defined in `groups` (e.g., "chl", "DOC").
@@ -408,7 +408,7 @@ if plot_timeseries:
   #                                          #   float in [-1, 0] (sigma val)  -> e.g., -0.7
   #                                          #   other float (absolute depth m)-> e.g., -8.0 (8 m below surface)
   #                                          #   ("z_m", z) or {"z_m": z}      -> explicit absolute-depth form
-  #     months: Optional[List[int]] = None,  # Filter to calendar months (1–12). Example: [7] for July, [4,5,6,7,8,9,10] for Apr–Oct.
+  #     months: Optional[List[int]] = None,  # Filter to calendar months (1-12). Example: [7] for July, [4,5,6,7,8,9,10] for Apr-Oct.
   #     years: Optional[List[int]] = None,   # Filter to calendar years. Example: [2018] or [2019, 2020].
   #     start_date: Optional[str] = None,    # Start date (inclusive) "YYYY-MM-DD". Use together with end_date.
   #     end_date: Optional[str] = None,      # End date (inclusive) "YYYY-MM-DD". Use together with start_date.
@@ -465,7 +465,7 @@ if plot_timeseries:
 
   # 2) Station timeseries
   # def station_timeseries(
-  #     ds: xr.Dataset,                               # Opened FVCOM–ERSEM dataset (e.g., via load_from_base()).
+  #     ds: xr.Dataset,                               # Opened FVCOM-ERSEM dataset (e.g., via load_from_base()).
   #     variables: List[str],                         # One or more series to plot. Each can be:
   #                                                   #   • a native variable in ds (e.g., "temp", "P1_c"), or
   #                                                   #   • a group name from `groups` (e.g., "chl", "DOC", "phyto").
@@ -479,7 +479,7 @@ if plot_timeseries:
   #                                                   #   float in [-1, 0] (sigma val)   -> e.g., -0.7
   #                                                   #   other float (absolute depth m) -> e.g., -8.0 (8 m below surface)
   #                                                   #   ("z_m", z) or {"z_m": z}       -> explicit absolute-depth form
-  #     months: Optional[List[int]] = None,           # Optional month filter (1–12). Example: [4,5,6,7,8,9,10] for Apr–Oct.
+  #     months: Optional[List[int]] = None,           # Optional month filter (1-12). Example: [4,5,6,7,8,9,10] for Apr-Oct.
   #     years: Optional[List[int]] = None,            # Optional year filter. Example: [2018] or [2019, 2020].
   #     start_date: Optional[str] = None,             # Optional start date "YYYY-MM-DD" (used with end_date).
   #     end_date: Optional[str] = None,               # Optional end date   "YYYY-MM-DD" (used with start_date).
@@ -496,7 +496,7 @@ if plot_timeseries:
   #                                                   #    "DOC":  {"line_color": "blue"}}
   #     verbose: bool = True,                         # Print progress (resolved node index, time window, saved path, etc.).
   #     combine_by: Optional[str] = None,             # Multi-line modes for convenience:
-  #                                                   #   None       -> one PNG per (station × variable)  [default]
+  #                                                   #   None       -> one PNG per (station x variable)  [default]
   #                                                   #   "var"      -> one PNG per station,  lines = variables
   #                                                   #   "station"  -> one PNG per variable, lines = stations
   # ) -> None:
@@ -523,7 +523,7 @@ if plot_timeseries:
       verbose=False,
   )
   
-  # Station WE12 — z = -5 m, Apr–Oct 2018: temp + DOC on one plot
+  # Station WE12 - z = -5 m, Apr-Oct 2018: temp + DOC on one plot
   station_timeseries(
       ds=ds,
       variables=["temp", "DOC"],
@@ -536,7 +536,7 @@ if plot_timeseries:
       verbose=False,
   )
   
-  # All stations — surface temp, Apr–Oct 2018: one plot, one line per station
+  # All stations - surface temp, Apr-Oct 2018: one plot, one line per station
   station_timeseries(
       ds=ds,
       variables=["temp"],
@@ -552,7 +552,7 @@ if plot_timeseries:
 
   # 3) Region timeseries 
   # def region_timeseries(
-  #     ds: xr.Dataset,                               # Opened FVCOM–ERSEM dataset (e.g., via load_from_base()).
+  #     ds: xr.Dataset,                               # Opened FVCOM-ERSEM dataset (e.g., via load_from_base()).
   #     variables: List[str],                         # One or more series to plot. Each can be:
   #                                                   #   • a native variable in ds (e.g., "temp", "P1_c"), or
   #                                                   #   • a group name from `groups` (e.g., "chl", "DOC", "phyto").
@@ -566,7 +566,7 @@ if plot_timeseries:
   #                                                   #   float in [-1, 0] (sigma val)   -> e.g., -0.7
   #                                                   #   other float (absolute depth m) -> e.g., -8.0 (8 m below surface)
   #                                                   #   ("z_m", z) or {"z_m": z}       -> explicit absolute-depth form
-  #     months: Optional[List[int]] = None,           # Optional month filter (1–12). Example: [4,5,6,7,8,9,10] for Apr–Oct.
+  #     months: Optional[List[int]] = None,           # Optional month filter (1-12). Example: [4,5,6,7,8,9,10] for Apr-Oct.
   #     years: Optional[List[int]] = None,            # Optional year filter. Example: [2018] or [2019, 2020].
   #     start_date: Optional[str] = None,             # Optional start date "YYYY-MM-DD" (used with end_date).
   #     end_date: Optional[str] = None,               # Optional end date   "YYYY-MM-DD" (used with start_date).
@@ -582,7 +582,7 @@ if plot_timeseries:
   #                                                   #   {"chl": {"line_color": "lightgreen"}, "temp": {"line_color": "lightblue"}}
   #     verbose: bool = True,                         # Print progress (mask details, time window, saved path, etc.).
   #     combine_by: Optional[str] = None,             # Multi-line modes for convenience:
-  #                                                   #   None       -> one PNG per (region × variable)  [default]
+  #                                                   #   None       -> one PNG per (region x variable)  [default]
   #                                                   #   "var"      -> one PNG per region,   lines = variables
   #                                                   #   "region"   -> one PNG per variable, lines = regions
   # ) -> None:
@@ -600,7 +600,7 @@ if plot_timeseries:
   #
   # Notes:
   # - Region masks are built on the FVCOM grid; elements/nodes strictly inside the polygon are included.
-  # - If mesh connectivity `nv` is present, “strict” element-inclusion may be used (all three nodes inside).
+  # - If mesh connectivity `nv` is present, "strict" element-inclusion may be used (all three nodes inside).
   # - If an area field (e.g., 'art1') exists, regional means are area-weighted; otherwise unweighted.
   # - CSV boundaries should trace the polygon perimeter (or set convex_hull=True to wrap scattered points).
   # - Works with Dask-chunked datasets; computation is triggered during reduction/plot.
@@ -622,7 +622,7 @@ if plot_timeseries:
       verbose=False,
   )
   
-  # Central region — surface, Jul 2018: chl + phyto + zoo on one plot
+  # Central region - surface, Jul 2018: chl + phyto + zoo on one plot
   region_timeseries(
       ds=ds,
       variables=["chl", "phyto", "zoo"],
@@ -635,7 +635,7 @@ if plot_timeseries:
       verbose=False,
   )
   
-  # Compare regions — bottom DOC, Apr–Oct 2018: one plot, one line per region
+  # Compare regions - bottom DOC, Apr-Oct 2018: one plot, one line per region
   region_timeseries(
       ds=ds,
       variables=["DOC"],
@@ -651,17 +651,17 @@ if plot_timeseries:
   # 4) Domain-wide Three-panel Figures (Surface ±1σ, Bottom ±1σ, Profile mean ±1σ) (1 figure with 3 subplots)
   # Full argument reference for domain_three_panel(...)
   # Each parameter below is annotated with what it does and accepted values.
-  # Produces a 3×1 (or similar) figure with:
+  # Produces a 3x1 (or similar) figure with:
   #   • Surface time series ±1σ
   #   • Bottom  time series ±1σ
   #   • Vertical-profile mean (depth-avg) time series ±1σ
   # One figure per variable; saves to disk; returns None.
   
   # def domain_three_panel(
-  #     ds: xr.Dataset,                              # Xarray Dataset with FVCOM–ERSEM output (already opened/combined)
+  #     ds: xr.Dataset,                              # Xarray Dataset with FVCOM-ERSEM output (already opened/combined)
   #     variables: list[str],                        # One or more names: native vars (e.g., "temp") or composites (e.g., "chl") if provided in `groups`
   #     *,                                           # Everything after this must be passed as keyword-only (safer, clearer)
-  #     months=None,                                 # Calendar months to include (1–12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
+  #     months=None,                                 # Calendar months to include (1-12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
   #     years=None,                                  # Calendar years to include; e.g., [2018] or [2018, 2019]; None = no year filter
   #     start_date=None,                             # Inclusive start date "YYYY-MM-DD"; used with end_date; None = no start bound
   #     end_date=None,                               # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = no end bound
@@ -683,7 +683,7 @@ if plot_timeseries:
   #
   # where:
   #   <prefix>    = file_prefix(base_dir)
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - Each panel shows the mean line and a ±1 standard deviation envelope for the selected vertical slice
@@ -695,7 +695,7 @@ if plot_timeseries:
   
   # Examples:
   
-  # Domain three-panel — DOC (full run)
+  # Domain three-panel - DOC (full run)
  domain_three_panel(
       ds=ds,
       variables=["DOC"],
@@ -710,20 +710,20 @@ if plot_timeseries:
   #5) Station-specific Three-panel Figures (Surface ±1σ, Bottom ±1σ, Profile mean ±1σ) (1 figure with 3 subplots)
   # Full argument reference for station_three_panel(...)
   # Each parameter below is annotated with what it does and accepted values.
-  # Produces a 3×1 figure per (station × variable) with:
+  # Produces a 3x1 figure per (station x variable) with:
   #   • Surface time series ±1σ (temporal σ at the station's nearest node)
   #   • Bottom  time series ±1σ (temporal σ at the station's nearest node)
   #   • Depth-averaged time series ±1σ (temporal σ at the station's nearest node)
-  # Saves one PNG per (station × variable); returns None.
+  # Saves one PNG per (station x variable); returns None.
   
   # def station_three_panel(
-  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM–ERSEM output (already opened/combined)
+  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM-ERSEM output (already opened/combined)
   #     variables: list[str],                         # One or more names: native vars (e.g., "temp") or composites (e.g., "chl") if provided in `groups`
   #     stations: List[Tuple[str, float, float]],     # Station metadata as (name, lat, lon) in WGS84 decimal degrees
   #                                                   #   - lon west of Greenwich is negative (e.g., -83.10)
   #                                                   #   - nearest model *node* is selected by great-circle distance (WGS84)
   #     *,                                            # Everything after this must be passed as keyword-only (safer, clearer)
-  #     months=None,                                  # Calendar months to include (1–12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
+  #     months=None,                                  # Calendar months to include (1-12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
   #     years=None,                                   # Calendar years to include; e.g., [2018] or [2018, 2019]; None = no year filter
   #     start_date=None,                              # Inclusive start date "YYYY-MM-DD"; used with end_date; None = no start bound
   #     end_date=None,                                # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = no end bound
@@ -739,14 +739,14 @@ if plot_timeseries:
   # ) -> None:
   #     pass  # Function extracts nearest-node series per station, computes surface/bottom/depth-avg series, plots 3 panels with temporal ±1σ, SAVES PNG(s); returns None
   
-  # Output path pattern (per station × variable):
+  # Output path pattern (per station x variable):
   #   <figures_root>/<basename(base_dir)>/timeseries/
   #     <prefix>__Station-<Name>__<VarOrGroup>__ThreePanel__<TimeLabel>__Timeseries.png
   #
   # where:
   #   <prefix>    = file_prefix(base_dir)
   #   <Name>      = station name from `stations`
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - σ shading is *temporal* at stations (single grid node): the envelope reflects time-wise standard deviation around the mean line.
@@ -757,7 +757,7 @@ if plot_timeseries:
   
   # Example: 
   
-  # Station three-panel — chl at first station (full run)
+  # Station three-panel - chl at first station (full run)
   station_three_panel(
       ds=ds,
       variables=["chl"],
@@ -774,14 +774,14 @@ if plot_timeseries:
   # 6) Region three-panel 
   # Full argument reference for region_three_panel(...)
   # Each parameter below is annotated with what it does and accepted values.
-  # Produces a 3×1 figure per (region × variable) with:
+  # Produces a 3x1 figure per (region x variable) with:
   #   • Surface time series ±1σ (SPATIAL σ across the region at each timestep)
   #   • Bottom  time series ±1σ (SPATIAL σ across the region at each timestep)
   #   • Depth-averaged time series ±1σ (SPATIAL σ across the region at each timestep)
-  # Saves one PNG per (region × variable); returns None.
+  # Saves one PNG per (region x variable); returns None.
   
   # def region_three_panel(
-  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM–ERSEM output (already opened/combined)
+  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM-ERSEM output (already opened/combined)
   #     variables: List[str],                         # One or more names: native vars (e.g., "temp") or composites (e.g., "chl") if provided in `groups`
   #     regions: List[Tuple[str, Dict[str, Any]]],    # List of region specs as (region_name, spec_dict).
   #                                                   #   spec_dict provides exactly ONE polygon source:
@@ -792,7 +792,7 @@ if plot_timeseries:
   #                                                   #       + "convex_hull": True|False                               # wrap scattered points
   #                                                   #       + "sort": "auto" | None                                   # attempt to order perimeter points
   #     *,                                            # Everything after this must be passed as keyword-only (safer, clearer)
-  #     months=None,                                  # Calendar months to include (1–12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
+  #     months=None,                                  # Calendar months to include (1-12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
   #     years=None,                                   # Calendar years to include; e.g., [2018] or [2018, 2019]; None = no year filter
   #     start_date=None,                              # Inclusive start date "YYYY-MM-DD"; used with end_date; None = no start bound
   #     end_date=None,                                # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = no end bound
@@ -809,14 +809,14 @@ if plot_timeseries:
   #     pass  # Function masks nodes/elements inside each region, computes regional surface/bottom/depth-avg means,
   #           # plots 3 panels with SPATIAL ±1σ envelopes per timestep, SAVES PNG(s); returns None
   
-  # Output path pattern (per region × variable):
+  # Output path pattern (per region x variable):
   #   <figures_root>/<basename(base_dir)>/timeseries/
   #     <prefix>__Region-<Name>__<VarOrGroup>__ThreePanel__<TimeLabel>__Timeseries.png
   #
   # where:
   #   <prefix>    = file_prefix(base_dir)
   #   <Name>      = region name from `regions`
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - Region mask is built on the FVCOM grid; only nodes/elements inside the polygon are included.
@@ -829,7 +829,7 @@ if plot_timeseries:
   
   # Example: 
   
-  # Region three-panel — DOC in first region, Apr–Oct
+  # Region three-panel - DOC in first region, Apr-Oct
   region_three_panel(
       ds=ds,
       variables=["DOC"],
@@ -848,7 +848,7 @@ if plot_timeseries:
   
   # Examples: 
   
-  # Domain — DOC at sigma layer index k=5, July
+  # Domain - DOC at sigma layer index k=5, July
   domain_mean_timeseries(
       ds=ds,
       variables=["DOC"],
@@ -863,7 +863,7 @@ if plot_timeseries:
   )
   
   
-  # Example: Station — chl at sigma value s = -0.7 (in [-1, 0]), full run
+  # Example: Station - chl at sigma value s = -0.7 (in [-1, 0]), full run
   station_timeseries(
       ds=ds,
       variables=["chl"],
@@ -878,7 +878,7 @@ if plot_timeseries:
   )
   
   
-  # Example: Region — temperature at absolute depth z = -8 m, Apr–Oct 2018
+  # Example: Region - temperature at absolute depth z = -8 m, Apr-Oct 2018
   region_timeseries(
       ds=ds,
       variables=["temp"],
@@ -910,7 +910,7 @@ if plot_timeseries:
 
 # Maps Overview
 # ---------------
-# Two functions create plan-view maps from FVCOM–ERSEM output:
+# Two functions create plan-view maps from FVCOM-ERSEM output:
 # - domain_map: full-model domain.
 # - region_map: masked to polygons (shapefile or CSV).
 #
@@ -943,7 +943,7 @@ if plot_maps:
   # Renders plan-view maps over the FULL domain; saves PNGs; returns None.
   
   # def domain_map(
-  #     ds: xr.Dataset,                              # Xarray Dataset with FVCOM–ERSEM output (already opened/combined)
+  #     ds: xr.Dataset,                              # Xarray Dataset with FVCOM-ERSEM output (already opened/combined)
   #     variables: List[str],                        # One or more names: native vars (e.g., "temp") or composites (e.g., "chl") if provided in `groups`
   #     *,                                           # Everything after this must be passed as keyword-only (safer, clearer)
   #     depth: Any,                                  # Vertical selection:
@@ -953,7 +953,7 @@ if plot_maps:
   #                                                  #   other float -> absolute depth z (meters, negative downward; e.g., -8.0 == 8 m below surface)
   #                                                  #   ("siglay_index", k) | ("sigma", s) | ("z_m", z)    # explicit tuple forms
   #                                                  #   {"z_m": z, "zvar": "z"}                            # dict form if vertical coord has non-default name
-  #     months: Optional[List[int]] = None,          # Calendar months to include (1–12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
+  #     months: Optional[List[int]] = None,          # Calendar months to include (1-12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
   #     years: Optional[List[int]] = None,           # Calendar years to include; e.g., [2018] or [2018, 2019]; None = no year filter
   #     start_date: Optional[str] = None,            # Inclusive start date "YYYY-MM-DD"; used with end_date; None = open start
   #     end_date: Optional[str] = None,              # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = open end
@@ -989,7 +989,7 @@ if plot_maps:
   # where:
   #   <prefix>    = file_prefix(base_dir)
   #   <DepthTag>  = derived from `depth` (Surface, Bottom, DepthAvg, SigmaK5, SigmaS0.7, Z8m, ...)
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - Node- vs element-centered variables are detected by presence of 'node' or 'nele' dims and plotted accordingly.
@@ -998,7 +998,7 @@ if plot_maps:
   # - Returns None; to view in a notebook, display saved PNGs afterward (e.g., with the gallery cell).
   
   # Examples:
-  # Domain mean maps at SURFACE — per-variable styles (DOC, chl, temp); July only
+  # Domain mean maps at SURFACE - per-variable styles (DOC, chl, temp); July only
   domain_map(
       ds=ds,
       variables=["DOC", "chl", "temp"],
@@ -1012,7 +1012,7 @@ if plot_maps:
       verbose=False,
   )
   
-  # Domain instantaneous maps at BOTTOM (phyto) — two timestamps
+  # Domain instantaneous maps at BOTTOM (phyto) - two timestamps
   domain_map(
       ds=ds,
       variables=["phyto"],
@@ -1027,7 +1027,7 @@ if plot_maps:
       verbose=False,
   )
   
-  # Domain mean at ABSOLUTE depth z = -8 m (phyto), Apr–Oct 2018
+  # Domain mean at ABSOLUTE depth z = -8 m (phyto), Apr-Oct 2018
   domain_map(
       ds=ds,
       variables=["phyto"],
@@ -1050,7 +1050,7 @@ if plot_maps:
   # Renders plan-view maps MASKED to polygon regions; saves PNGs; returns None.
   
   # def region_map(
-  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM–ERSEM output (already opened/combined).
+  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM-ERSEM output (already opened/combined).
   #                                                  # Must include 'lon' and 'lat' for building region masks.
   #     variables: List[str],                         # One or more names: native vars (e.g., "temp") or composites (e.g., "chl") if provided in `groups`.
   #     regions: List[Tuple[str, Dict[str, Any]]],    # List of (region_name, spec_dict) entries. Each spec_dict provides EXACTLY ONE polygon source:
@@ -1068,7 +1068,7 @@ if plot_maps:
   #                                                   #   other float -> absolute depth z (meters, negative downward; e.g., -8.0 == 8 m below surface)
   #                                                   #   ("siglay_index", k) | ("sigma", s) | ("z_m", z)          # explicit tuple forms
   #                                                   #   {"z_m": z, "zvar": "z"}                                  # dict form if vertical coord has non-default name
-  #     months: Optional[List[int]] = None,           # Calendar months to include (1–12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter.
+  #     months: Optional[List[int]] = None,           # Calendar months to include (1-12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter.
   #     years: Optional[List[int]] = None,            # Calendar years to include; e.g., [2018] or [2018, 2019]; None = no year filter.
   #     start_date: Optional[str] = None,             # Inclusive start date "YYYY-MM-DD"; used with end_date; None = open start.
   #     end_date: Optional[str] = None,               # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = open end.
@@ -1106,7 +1106,7 @@ if plot_maps:
   #   <prefix>    = file_prefix(base_dir)
   #   <Name>      = region name from `regions`
   #   <DepthTag>  = derived from `depth` (Surface, Bottom, DepthAvg, SigmaK5, SigmaS0.7, Z8m, ...)
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - Node- vs element-centered variables are detected by presence of 'node' or 'nele' dims and plotted accordingly.
@@ -1193,14 +1193,14 @@ if plot_maps:
 # Key options:
 # - axis: "sigma" (native layers) or "z" (interpolated absolute depth, m)
 # - variables: native or grouped (e.g., "temp", "chl", "phyto")
-# - time window: months / years / start_date–end_date
+# - time window: months / years / start_date-end_date
 # - styling: colormap, norm, vmin/vmax, robust limits, figsize, dpi
 #
 # Typical workflow:
 # 1. Subset dataset in time.
 # 2. Extract vertical column at each station.
 # 3. Choose vertical axis ("sigma" or "z_levels").
-# 4. Plot time × depth using pcolormesh and save figure.
+# 4. Plot time x depth using pcolormesh and save figure.
 
 if plot_hovmoller:
   from fvcomersemviz.plots.hovmoller import station_hovmoller
@@ -1208,10 +1208,10 @@ if plot_hovmoller:
   # Station Hovmoller
   # Full argument reference for station_hovmoller(...)
   # Each parameter below is annotated with what it does and accepted values.
-  # Produces time × depth (Hovmöller) plots at STATIONS; saves PNGs; returns None.
+  # Produces time x depth (Hovmöller) plots at STATIONS; saves PNGs; returns None.
   
   # def station_hovmoller(
-  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM–ERSEM output (already opened/combined)
+  #     ds: xr.Dataset,                               # Xarray Dataset with FVCOM-ERSEM output (already opened/combined)
   #     variables: List[str],                         # One or more names: native vars (e.g., "temp") or composites (e.g., "chl") if provided in `groups`
   #     stations: List[Tuple[str, float, float]],     # Station metadata as (name, lat, lon) in WGS84 decimal degrees
   #                                                   #   - lon west of Greenwich is negative (e.g., -83.10)
@@ -1221,8 +1221,8 @@ if plot_hovmoller:
   #                                                   #   "sigma" -> y-axis is sigma layers (unitless), no interpolation
   #                                                   #   "z"     -> y-axis is absolute depth in meters (negative downward), σ-profiles interpolated to `z_levels`
   #     z_levels: Optional[np.ndarray] = None,        # Regular depth levels (ascending, e.g., np.linspace(-30, 0, 61)) used when axis="z".
-  #                                                   # If None, levels are auto-built from the station column’s min depth to 0 m.
-  #     months: Optional[List[int]] = None,           # Calendar months to include (1–12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
+  #                                                   # If None, levels are auto-built from the station column's min depth to 0 m.
+  #     months: Optional[List[int]] = None,           # Calendar months to include (1-12) across all years; e.g., [7] or [4,5,6,7,8,9,10]; None = no month filter
   #     years: Optional[List[int]] = None,            # Calendar years to include; e.g., [2018] or [2018, 2019]; None = no year filter
   #     start_date: Optional[str] = None,             # Inclusive start date "YYYY-MM-DD"; used with end_date; None = open start
   #     end_date: Optional[str] = None,               # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = open end
@@ -1242,18 +1242,18 @@ if plot_hovmoller:
   #                                                   #   {"DOC": {"cmap": "viridis"}}
   #                                                   #   {"zoo": {"norm": LogNorm(1e-4, 1e0)}}  # norm takes precedence over vmin/vmax
   # ) -> None:
-  #     pass  # Function time-filters ds, resolves nearest node/element per station, builds (time × sigma) or
-  #           # interpolated (time × z) arrays, chooses color limits (norm -> explicit -> robust), plots pcolormesh,
+  #     pass  # Function time-filters ds, resolves nearest node/element per station, builds (time x sigma) or
+  #           # interpolated (time x z) arrays, chooses color limits (norm -> explicit -> robust), plots pcolormesh,
   #           # and SAVES PNG(s); returns None.
   
-  # Output path pattern (per station × variable × axis):
+  # Output path pattern (per station x variable x axis):
   #   <figures_root>/<basename(base_dir)>/hovmoller/
   #     <prefix>__Hovmoller-Station-<Name>__<VarOrGroup>__sigma|z__<TimeLabel>.png
   #
   # where:
   #   <prefix>    = file_prefix(base_dir)
   #   <Name>      = station name from `stations`
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, Jul, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - For axis="sigma": plots native σ layers; fastest, no vertical interpolation.
@@ -1264,7 +1264,7 @@ if plot_hovmoller:
   
   # Examples:
   
-  # WE12 — chlorophyll on sigma layers (full run, robust colour limits)
+  # WE12 - chlorophyll on sigma layers (full run, robust colour limits)
   station_hovmoller(
       ds=ds,
       variables=["chl"],
@@ -1275,27 +1275,27 @@ if plot_hovmoller:
       styles=PLOT_STYLES,                   # per-var cmap/norm/vmin/vmax if set
   )
   
-  # WE12 — DOC on absolute depth z (Apr–Oct 2018), explicit z grid
+  # WE12 - DOC on absolute depth z (Apr-Oct 2018), explicit z grid
   station_hovmoller(
       ds=ds,
       variables=["DOC"],
       stations=[STATIONS[0]],
       axis="z",
       z_levels=np.linspace(-20.0, 0.0, 60), # omit to auto-build from column depth
-      months= [4, 5, 6, 7, 8, 9, 10],   # Apr–Oct
+      months= [4, 5, 6, 7, 8, 9, 10],   # Apr-Oct
       years  = [2018],
       base_dir=BASE_DIR, figures_root=FIG_DIR,
       groups=GROUPS,
       styles=PLOT_STYLES,
   )
   
-  # WE13 — zooplankton on sigma layers (Apr–Oct 2018)
+  # WE13 - zooplankton on sigma layers (Apr-Oct 2018)
   station_hovmoller(
       ds=ds,
       variables=["zoo"],
       stations=[STATIONS[1]],
       axis="sigma",
-      months= [4, 5, 6, 7, 8, 9, 10],   # Apr–Oct
+      months= [4, 5, 6, 7, 8, 9, 10],   # Apr-Oct
       years  = [2018],
       base_dir=BASE_DIR, figures_root=FIG_DIR,
       groups=GROUPS,
@@ -1319,7 +1319,7 @@ if plot_hovmoller:
 
 # KDE Stoichiometry Plots
 # ------------------------
-# Creates a 2×2 density figure showing N:C and P:C ratios vs a chosen variable
+# Creates a 2x2 density figure showing N:C and P:C ratios vs a chosen variable
 # at surface and bottom depths:
 #   [surface N:C vs var]  [surface P:C vs var]
 #   [bottom  N:C vs var]  [bottom  P:C vs var]
@@ -1334,19 +1334,19 @@ if plot_hovmoller:
 # - group: biological group (e.g., "P5"); uses <group>_NC and <group>_PC.
 # - variable: native or grouped variable (y-axis).
 # - region: optional polygon mask from REGIONS.
-# - time: months / years / start_date–end_date.
+# - time: months / years / start_date-end_date.
 # - method: "kde" (accurate) or "hist" (fast); control smoothness via bw/hist_sigma.
 # - style: cmap, vmin/vmax, scatter_underlay, figsize, dpi.
 #
 # Typical workflow:
 # 1. Subset time and (optionally) region.
 # 2. Extract surface and bottom slices for variable and stoichiometric ratios.
-# 3. Build density grids (KDE or hist+blur) and plot 2×2 panels.
+# 3. Build density grids (KDE or hist+blur) and plot 2x2 panels.
 # 4. Save figure; empty panels are skipped automatically.
 
 
 
-# --- Stoichiometry KDE (2×2) examples:  ---
+# --- Stoichiometry KDE (2x2) examples:  ---
 
 if plot_kde:
   from fvcomersemviz.plots.kde_stoichiometry import kde_stoichiometry_2x2
@@ -1355,14 +1355,14 @@ if plot_kde:
   
   # Full argument reference for kde_stoichiometry_2x2(...)
   # Each parameter below is annotated with what it does and accepted values.
-  # Builds a single 2×2 figure of density plots:
+  # Builds a single 2x2 figure of density plots:
   #   [surface N:C vs <variable>]  [surface P:C vs <variable>]
   #   [bottom  N:C vs <variable>]  [bottom  P:C vs <variable>]
-  # Samples are pooled over time×space within an optional region and time window; panels with too
+  # Samples are pooled over timexspace within an optional region and time window; panels with too
   # few finite samples are skipped. The figure is SAVED to disk; function returns None.
   
   # def kde_stoichiometry_2x2(
-  #     ds: xr.Dataset,                                 # Xarray Dataset with FVCOM–ERSEM output (opened/combined)
+  #     ds: xr.Dataset,                                 # Xarray Dataset with FVCOM-ERSEM output (opened/combined)
   #     *,                                              # Everything after this must be passed as keyword-only (safer, clearer)
   #     group: str,                                     # ERSEM functional group tag, e.g. "P5".
   #                                                     # The function expects native stoichiometry fields "<group>_NC" and "<group>_PC".
@@ -1372,7 +1372,7 @@ if plot_kde:
   #                                                     # spec options (one of):
   #                                                     #   {"shapefile": "/path/to/region.shp"} [+ optional "name_field","name_equals"]
   #                                                     #   {"csv_boundary": "/path/to/boundary.csv"} [+ "lon_col","lat_col","convex_hull","sort"]
-  #     months: Optional[List[int]] = None,             # Calendar months (1–12) to include; e.g., [6,7,8] for JJA; None = no month filter.
+  #     months: Optional[List[int]] = None,             # Calendar months (1-12) to include; e.g., [6,7,8] for JJA; None = no month filter.
   #     years: Optional[List[int]] = None,              # Calendar years to include; e.g., [2018] or [2018,2019]; None = no year filter.
   #     start_date: Optional[str] = None,               # Inclusive start date "YYYY-MM-DD"; used with end_date; None = open start.
   #     end_date: Optional[str] = None,                 # Inclusive end date   "YYYY-MM-DD"; used with start_date; None = open end.
@@ -1386,7 +1386,7 @@ if plot_kde:
   #     cmap: str = "viridis",                          # Default colormap for density (can be overridden per variable via `styles`).
   #     grids: int = 100,                               # Grid resolution for density evaluation (higher = more detail, slower).
   #     bw_method: Optional[float | str] = "scott",     # KDE bandwidth ("scott", "silverman", or float scalar); ignored if method="hist".
-  #     min_samples: int = 200,                         # Minimum number of finite (x,y) pairs required to render a panel; otherwise it’s skipped.
+  #     min_samples: int = 200,                         # Minimum number of finite (x,y) pairs required to render a panel; otherwise it's skipped.
   #     scatter_underlay: int = 0,                      # If >0, plot up to N random raw points under the density for context (thin black dots).
   #     verbose: bool = False,                          # If True, print progress, panel skips, output path.
   #     styles: Optional[Dict[str, Dict[str, Any]]] = None,  # Per-variable style overrides, e.g.:
@@ -1400,7 +1400,7 @@ if plot_kde:
   # ) -> None:
   #     pass  # Function filters by time, selects surface/bottom slices, builds optional region mask, pools samples,
   #           # computes 2D density for (NC:C vs variable) and (PC:C vs variable) at surface & bottom,
-  #           # renders a 2×2 figure, and SAVES it; returns None.
+  #           # renders a 2x2 figure, and SAVES it; returns None.
   
   # Output path pattern:
   #   <figures_root>/<basename(base_dir)>/kde_stoichiometry/
@@ -1409,12 +1409,12 @@ if plot_kde:
   # where:
   #   <prefix>    = file_prefix(base_dir)
   #   <RegionTag> = region name or "Domain" if region=None
-  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, JJA, 2018, 2018-04–2018-10, ...)
+  #   <TimeLabel> = derived from months/years/start_date/end_date (AllTime, JJA, 2018, 2018-04-2018-10, ...)
   #
   # Notes:
   # - Panels are computed from internally selected "surface" and "bottom" slices.
   # - Center-aware masking aligns node/element data before pooling; only in-region samples contribute when a region is set.
-  # - When `styles[variable]["vmin"/"vmax"]` exist, they’re applied to the y-axis for consistent comparisons.
+  # - When `styles[variable]["vmin"/"vmax"]` exist, they're applied to the y-axis for consistent comparisons.
   # - If every panel has < min_samples (after filtering/masking), no file is saved and a verbose message is printed instead.
   
   # Fast/default options
@@ -1434,14 +1434,14 @@ if plot_kde:
       group="P5",
       variable="P5_c",
       region=None,                     # full domain
-      months=[6,7,8], years=None,      # Jun–Aug across all years
+      months=[6,7,8], years=None,      # Jun-Aug across all years
       base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
       min_samples=200, scatter_underlay=800,
       styles=PLOT_STYLES if "PLOT_STYLES" in globals() else None,
       FAST,
   )
   
-  # REGION • Apr–Oct 2018 • group=P5 • variable=phyto (composite)
+  # REGION • Apr-Oct 2018 • group=P5 • variable=phyto (composite)
   if "REGIONS" in globals() and REGIONS:
       kde_stoichiometry_2x2(
           ds=ds,
@@ -1565,9 +1565,9 @@ if plot_kde:
 # [Surface Phyto, Bottom Phyto, Surface Zoo, Bottom Zoo].
 #
 # def composition_surface_bottom(
-#     ds: xr.Dataset,                               # FVCOM–ERSEM dataset (already opened/combined).
+#     ds: xr.Dataset,                               # FVCOM-ERSEM dataset (already opened/combined).
 #     *,
-#     months: Optional[List[int]] = None,           # Time filter by month numbers (1–12). Combineable with years/start/end.
+#     months: Optional[List[int]] = None,           # Time filter by month numbers (1-12). Combineable with years/start/end.
 #     years: Optional[List[int]] = None,            # Time filter by calendar years (e.g., [2018, 2019]).
 #     start_date: Optional[str] = None,             # Inclusive lower bound date "YYYY-MM-DD".
 #     end_date: Optional[str] = None,               # Inclusive upper bound date "YYYY-MM-DD".
@@ -1588,7 +1588,7 @@ if plot_kde:
 #           # 3) select_depth(..., "surface") and select_depth(..., "bottom").
 #           # 4) For each bar, pool with sum_over_all_dims(...) then normalize to fractions.
 #           # 5) Draw four stacked bars via stacked_fraction_bars(...).
-#           # 6) Auto-title "<Phyto / Zoo Composition – Who – When>".
+#           # 6) Auto-title "<Phyto / Zoo Composition - Who - When>".
 #           # 7) Save PNG and close figure.
 #
 # Output path pattern:
@@ -1615,7 +1615,7 @@ if plot_kde:
 # [Phyto (avg), Zoo (avg)].
 #
 # def composition_depth_average_single(
-#     ds: xr.Dataset,                               # FVCOM–ERSEM dataset.
+#     ds: xr.Dataset,                               # FVCOM-ERSEM dataset.
 #     *,
 #     months: Optional[List[int]] = None,           # Time filter by months.
 #     years: Optional[List[int]] = None,            # Time filter by years.
@@ -1639,7 +1639,7 @@ if plot_kde:
 #           #      except: mean over "siglay" if present; else leave dataset unchanged.
 #           # 4) Pool over remaining dims → normalize to fractions per group.
 #           # 5) Draw two stacked bars (bar_width=0.30, legend docked outside).
-#           # 6) Title "Depth-averaged Composition – Who – When".
+#           # 6) Title "Depth-averaged Composition - Who - When".
 #           # 7) Save PNG and close figure.
 #
 # Output path pattern:
@@ -1660,7 +1660,7 @@ if plot_kde:
 # [Phyto (z), Zoo (z)].
 #
 # def composition_at_depth_single(
-#     ds: xr.Dataset,                               # FVCOM–ERSEM dataset.
+#     ds: xr.Dataset,                               # FVCOM-ERSEM dataset.
 #     *,
 #     z_level: float,                               # Absolute depth in meters (negative is downward, e.g., -10.0).
 #     tol: float = 0.75,                            # ± meters tolerance for nearest-layer match to z_level.
@@ -1685,7 +1685,7 @@ if plot_kde:
 #           #    - If select_depth lacks dict API or no layer within tolerance: raise RuntimeError with context.
 #           # 4) Pool over remaining dims → normalize to fractions per group.
 #           # 5) Draw two stacked bars (bar_width=0.30, legend docked outside).
-#           # 6) Title "Composition at z=<z_level> m – Who – When".
+#           # 6) Title "Composition at z=<z_level> m - Who - When".
 #           # 7) Save PNG and close figure.
 #
 # Output path pattern:
@@ -1731,9 +1731,9 @@ if plot_composition:
   )
   
   # =========================================================================
-  # 2) REGION (Central) • Apr–Oct 2018 • Surface/Bottom composition
+  # 2) REGION (Central) • Apr-Oct 2018 • Surface/Bottom composition
   # =========================================================================
-  info(" Example 2: REGION(Central) • Apr–Oct 2018 • Surface/Bottom composition")
+  info(" Example 2: REGION(Central) • Apr-Oct 2018 • Surface/Bottom composition")
   composition_surface_bottom(
       ds=ds,
       months=[4,5,6,7,8,9,10], years=[2018],
@@ -1782,7 +1782,7 @@ if plot_composition:
 #                                           
                                             
 
-# Curves (x–y Diagnostics)
+# Curves (x-y Diagnostics)
 # ------------------------
 # Visualize relationships between two model variables (Y vs X)
 # after applying time filters, spatial scope (domain / region / station),
@@ -1824,7 +1824,7 @@ from fvcomersemviz.plots.curves import plot_curves
 
   # We use different groups / variables for this example - so we will need to update the GROUPS dictionary
   GROUPS = {
-      # Aliases (nice short names you’ll use in specs)
+      # Aliases (nice short names you'll use in specs)
       "PAR": "light_parEIR",
       "DIN": "N3_n + N4_n",
   
@@ -1841,7 +1841,7 @@ from fvcomersemviz.plots.curves import plot_curves
   
   # plot_curves
   # Full argument reference for plot_curves(...)
-  # Renders one figure containing one or more “curves” describing y vs x relationships,
+  # Renders one figure containing one or more "curves" describing y vs x relationships,
   
   # def plot_curves(
   #     specs: Sequence[Dict[str, Any]],                # Plot_curves requires the user to build a specs dictionary (one dict per curve).
@@ -1871,7 +1871,7 @@ from fvcomersemviz.plots.curves import plot_curves
   #                                                     #     "aliases": {"PAR": "light_parEIR"}      # optional per-spec alias map
   #                                                     #   }
   #     *,
-  #     ds: xr.Dataset,                                  # FVCOM–ERSEM dataset (already opened/combined).
+  #     ds: xr.Dataset,                                  # FVCOM-ERSEM dataset (already opened/combined).
   #     groups: Optional[Dict[str, Any]] = None,         # Global alias/composite/derived expressions used by specs, e.g.:
   #                                                       # {"chl_total": "P1_Chl + P2_Chl + P4_Chl",
   #                                                       #  "DIN": "N3_n + N4_n"}
@@ -1888,7 +1888,7 @@ from fvcomersemviz.plots.curves import plot_curves
   #     stem: Optional[str] = None,                      # Optional filename stem override. If None, a stem is auto-built from:
   #                                                       #   ScopeTag (Domain|Region-<N>|Station-<N>|MultiScope),
   #                                                       #   DepthTag (surface|bottom|depth_avg|z-XXm|AllDepth|MixedDepth),
-  #                                                       #   TimeLabel (JJA|2018|YYYY-MM–YYYY-MM|AllTime|MixedTime),
+  #                                                       #   TimeLabel (JJA|2018|YYYY-MM-YYYY-MM|AllTime|MixedTime),
   #                                                       #   Content ("<X>_vs_<Y>" and "Ncurves" if >1 spec).
   #     dpi: int = 150,                                  # Output PNG resolution.
   #     figsize: Tuple[float, float]] = (7.2, 4.6),      # Figure size in inches.
@@ -1916,7 +1916,7 @@ from fvcomersemviz.plots.curves import plot_curves
   #   <subdir>     = env FVCOM_PLOT_SUBDIR if set; otherwise "curves"
   #   <ScopeTag>   = Domain | Region-<Name> | Station-<Name> | MultiScope
   #   <DepthTag>   = surface | bottom | depth_avg | z-10m | AllDepth | MixedDepth
-  #   <TimeLabel>  = built from months/years/start/end (e.g., JJA, 2018, 2018-04–2018-10, AllTime, MixedTime)
+  #   <TimeLabel>  = built from months/years/start/end (e.g., JJA, 2018, 2018-04-2018-10, AllTime, MixedTime)
   #   <Content>    = "<X>_vs_<Y>" from the first spec plus "Ncurves" if multiple curves are shown
   #
   # Notes:
@@ -1935,7 +1935,7 @@ from fvcomersemviz.plots.curves import plot_curves
   #      - Choose ONE of:  bin={...}  OR  scatter={...}
   #      - style: optional matplotlib kwargs (color/linestyle/marker/etc.)
   
-  # Example 1 — Region vs Region (binned median + IQR), surface, JJA 2018, daylight only
+  # Example 1 - Region vs Region (binned median + IQR), surface, JJA 2018, daylight only
   
   # Define the spec
   specs_light_chl = [
@@ -1970,7 +1970,7 @@ from fvcomersemviz.plots.curves import plot_curves
       dpi=150,
   )
   
-  # Example 2 — Domain, depth-avg, Apr–Oct 2018 (binned)
+  # Example 2 - Domain, depth-avg, Apr-Oct 2018 (binned)
   
   # Spec
   specs_temp_phyto = [{
@@ -1992,7 +1992,7 @@ from fvcomersemviz.plots.curves import plot_curves
       base_dir=BASE_DIR, figures_root=FIG_DIR, dpi=150,
   )
   
-  # Example 3 — Domain, depth-avg, Apr–Oct 2018 (scatter cloud)
+  # Example 3 - Domain, depth-avg, Apr-Oct 2018 (scatter cloud)
   
   # Spec
   specs_temp_prod_scatter = [{
@@ -2035,7 +2035,7 @@ from fvcomersemviz.plots.curves import plot_curves
           "x_label": "PAR (EIR)",
           "y_label": "Total chlorophyll",
       },
-      # 2) Binned median + IQR “backbone” (drawn second → on top)
+      # 2) Binned median + IQR "backbone" (drawn second → on top)
       {
           "name": "Median (IQR)",
           "x": "PAR",
@@ -2147,7 +2147,7 @@ if plot_animate:
   #     base_dir: str = "",                                  # Used to form filename prefix
   #     figures_root: str = "",                              # Root folder for saving GIFs (module subdir auto-added)
   #     combine_by: Optional[str] = None,                    # None | "var" | "region" | "station"
-  #                                                          #   None      -> one GIF per (scope item × variable)
+  #                                                          #   None      -> one GIF per (scope item x variable)
   #                                                          #   "var"     -> one GIF per scope item; lines = variables
   #                                                          #   "region"  -> scope="region": one GIF per variable; lines = regions
   #                                                          #   "station" -> scope="station": one GIF per variable; lines = stations
@@ -2158,7 +2158,7 @@ if plot_animate:
   #     verbose: bool = True,                                # Print progress / debug
   # ) -> List[str]:
   #     """
-  #     Create growing-line time-series GIF animations from FVCOM–ERSEM datasets.
+  #     Create growing-line time-series GIF animations from FVCOM-ERSEM datasets.
   #
   #     Parameters
   #     ----------
@@ -2179,7 +2179,7 @@ if plot_animate:
   #
   #     Time filters
   #     ------------
-  #     `months`, `years`, and/or `start_date`–`end_date` may be combined. Omitted ⇒ full span.
+  #     `months`, `years`, and/or `start_date`-`end_date` may be combined. Omitted ⇒ full span.
   #
   #     Depth selection
   #     ---------------
@@ -2189,7 +2189,7 @@ if plot_animate:
   #     Combining (multi-line animations)
   #     ---------------------------------
   #     combine_by=None:
-  #         One GIF per (scope item × variable).
+  #         One GIF per (scope item x variable).
   #     combine_by="var":
   #         One GIF per scope item, overlaying all variables as separate lines.
   #     combine_by="region":
@@ -2226,7 +2226,7 @@ if plot_animate:
   # Examples:
   
 
-  # DOMAIN — combine_by='var': one GIF, multiple lines = variables
+  # DOMAIN - combine_by='var': one GIF, multiple lines = variables
 
   info("[animate] Domain (one animation, lines = vars)…")
   animate_timeseries(
@@ -2243,7 +2243,7 @@ if plot_animate:
   )
   
 
-  # DOMAIN — no combining: one GIF per variable (classic behaviour)
+  # DOMAIN - no combining: one GIF per variable (classic behaviour)
 
   info("[animate] Domain (separate per variable)…")
   animate_timeseries(
@@ -2260,7 +2260,7 @@ if plot_animate:
   )
   
 
-  # REGIONS — combine_by='var': one GIF per region, lines = variables
+  # REGIONS - combine_by='var': one GIF per region, lines = variables
 
   info("[animate] Regions (per region, lines = vars)…")
   animate_timeseries(
@@ -2278,7 +2278,7 @@ if plot_animate:
   )
   
 
-  # REGIONS — combine_by='region': one GIF per variable, lines = regions
+  # REGIONS - combine_by='region': one GIF per variable, lines = regions
 
   info("[animate] Regions (per var, lines = regions)…")
   animate_timeseries(
@@ -2296,9 +2296,9 @@ if plot_animate:
   )
   
 
-  # STATIONS — combine_by=None: one GIF per (station × variable)
+  # STATIONS - combine_by=None: one GIF per (station x variable)
 
-  info("[animate] Stations (separate per station × variable)…")
+  info("[animate] Stations (separate per station x variable)…")
   animate_timeseries(
       ds,
       vars=["chl", "phyto"],
@@ -2314,7 +2314,7 @@ if plot_animate:
   )
   
 
-  # STATIONS — combine_by='station': one GIF per variable, lines = stations
+  # STATIONS - combine_by='station': one GIF per variable, lines = stations
 
   info("[animate] Stations (per var, lines = stations)…")
   animate_timeseries(
@@ -2374,7 +2374,7 @@ if plot_animate:
   #     verbose: bool = True,                              # Print progress / debug
   # ) -> List[str]:
   #     """
-  #     Create animated maps (GIF/MP4) from FVCOM–ERSEM (or similar) datasets.
+  #     Create animated maps (GIF/MP4) from FVCOM-ERSEM (or similar) datasets.
   #
   #     Parameters
   #     ----------
@@ -2395,7 +2395,7 @@ if plot_animate:
   #
   #     Time filters
   #     ------------
-  #     `months`, `years`, and/or `start_date`–`end_date` may be combined. If all omitted,
+  #     `months`, `years`, and/or `start_date`-`end_date` may be combined. If all omitted,
   #     the full dataset span is used.
   #
   #     Explicit instants vs cadence

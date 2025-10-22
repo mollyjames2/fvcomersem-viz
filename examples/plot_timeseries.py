@@ -176,7 +176,7 @@ REGIONS = [
 #       "csv_boundary": "/data/proteus1/backup/rito/Models/FVCOM/fvcom-projects/erie/python/postprocessing/west_stations.csv",
 #       "lon_col": "lon", 
 #       "lat_col": "lat",
-#       "convex_hull": True,   # <— wrap points
+#       "convex_hull": True,   # <- wrap points
 #       # "sort": "auto",      # (use this if your CSV is a boundary but unordered)
 #   }),
 ]   
@@ -184,8 +184,8 @@ REGIONS = [
 # -----------------------------
 # Example time windows
 # -----------------------------
-# MONTHS_EXAMPLE: filter by calendar months (1–12). This applies across all years in the dataset.
-MONTHS_EXAMPLE = [4, 5, 6, 7, 8, 9, 10]   # Apr–Oct
+# MONTHS_EXAMPLE: filter by calendar months (1-12). This applies across all years in the dataset.
+MONTHS_EXAMPLE = [4, 5, 6, 7, 8, 9, 10]   # Apr-Oct
 
 # YEARS_EXAMPLE: filter by calendar year(s). You can list multiple years, e.g., [2018, 2019].
 YEARS_EXAMPLE  = [2018]
@@ -365,13 +365,13 @@ def main():
         base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,styles=PLOT_STYLES,
     )
     
-    bullet("\n[3-panel / Region Central] DOC, Apr–Oct")
+    bullet("\n[3-panel / Region Central] DOC, Apr-Oct")
     plot_call(
         region_three_panel,
         ds=ds,
         variables=["DOC"],
         regions=[REGIONS[0]],
-        months=[4,5,6,7,8,9,10],  # Apr–Oct example window
+        months=[4,5,6,7,8,9,10],  # Apr-Oct example window
         base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,styles=PLOT_STYLES,
     )
 
@@ -395,7 +395,7 @@ def main():
     #   • Absolute-depth selection requires a vertical coordinate with a 'siglay' dim (default variable name: 'z').
 
     
-    #DOMAIN — DOC at sigma layer index k=5, July only
+    #DOMAIN - DOC at sigma layer index k=5, July only
     bullet("\n Full domain DOC at sigma layer index k=5, July")
     plot_call(
         domain_mean_timeseries,
@@ -406,7 +406,7 @@ def main():
         base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,styles=PLOT_STYLES,
     )
 
-    # STATION (WE12) — chl at sigma value s=-0.7, full run
+    # STATION (WE12) - chl at sigma value s=-0.7, full run
     bullet("\n Station chl at sigma value s=-0.7, full run")
     plot_call(
         station_timeseries,
@@ -417,8 +417,8 @@ def main():
         base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,styles=PLOT_STYLES,
     )
 
-    # REGION (Central) — temperature at absolute depth z=-8 m, Apr–Oct 2018
-    bullet("\n Regional temp at depth z=-8m, Apr–Oct 2018")
+    # REGION (Central) - temperature at absolute depth z=-8 m, Apr-Oct 2018
+    bullet("\n Regional temp at depth z=-8m, Apr-Oct 2018")
     plot_call(
         region_timeseries,
         ds=ds,
@@ -450,8 +450,8 @@ def main():
     # All filenames automatically include a suffix like "__CombinedByVar" etc.
     # =============================================================================
     
-    # DOMAIN — combine_by='var': one figure, lines = variables
-    bullet("\n Domain — Surface, 2018: lines = temp, DOC, chl, phyto, zoo")
+    # DOMAIN - combine_by='var': one figure, lines = variables
+    bullet("\n Domain - Surface, 2018: lines = temp, DOC, chl, phyto, zoo")
     plot_call(
         domain_mean_timeseries,
         ds=ds,
@@ -462,8 +462,8 @@ def main():
         combine_by="var",
     )
     
-    # REGIONS — combine_by='region': one figure per variable, lines = regions
-    bullet("\n Regions comparison — z = -10 m, 2018: lines = regions (per variable)")
+    # REGIONS - combine_by='region': one figure per variable, lines = regions
+    bullet("\n Regions comparison - z = -10 m, 2018: lines = regions (per variable)")
     plot_call(
         region_timeseries,
         ds=ds,
@@ -475,8 +475,8 @@ def main():
         combine_by="region",
     )
 
-    # REGIONS — combine_by='var': one figure per region, lines = variables
-    bullet("\n Regions (all) — JJA 2018 at surface: lines = chl, phyto, zoo (per region)")
+    # REGIONS - combine_by='var': one figure per region, lines = variables
+    bullet("\n Regions (all) - JJA 2018 at surface: lines = chl, phyto, zoo (per region)")
     plot_call(
         region_timeseries,
         ds=ds,
@@ -488,8 +488,8 @@ def main():
         combine_by="var",
     )
 
-    # STATIONS — combine_by='station': one figure per variable, lines = stations
-    bullet("\n Stations comparison — Apr–Oct 2018, depth-avg: lines = stations (per variable)")
+    # STATIONS - combine_by='station': one figure per variable, lines = stations
+    bullet("\n Stations comparison - Apr-Oct 2018, depth-avg: lines = stations (per variable)")
     plot_call(
         station_timeseries,
         ds=ds,
@@ -501,8 +501,8 @@ def main():
         combine_by="station",
     )
     
-    # STATIONS — combine_by='var': one figure per station, lines = variables
-    bullet("\n Station WE12 — z = -5 m, Apr–Oct 2018: lines = temp, DOC")
+    # STATIONS - combine_by='var': one figure per station, lines = variables
+    bullet("\n Station WE12 - z = -5 m, Apr-Oct 2018: lines = temp, DOC")
     plot_call(
         station_timeseries,
         ds=ds,

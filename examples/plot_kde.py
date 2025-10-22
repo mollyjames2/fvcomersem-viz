@@ -3,8 +3,8 @@
 """
 =============================
 
-A narrated demo of **2×2 Gaussian KDE (density) plots** that relate an ERSEM
-functional group’s nutrient stoichiometry (N:C, P:C) to any chosen model
+A narrated demo of **2x2 Gaussian KDE (density) plots** that relate an ERSEM
+functional group's nutrient stoichiometry (N:C, P:C) to any chosen model
 variable (e.g. biomass, Chl, DOC).
 
 Each figure shows:
@@ -15,12 +15,12 @@ Each figure shows:
     │ Bottom   N:C vs variable     │ Bottom   P:C vs variable     │
     └──────────────────────────────┴──────────────────────────────┘
 
-All time × spatial samples inside the chosen **region** and **time window**
+All time x spatial samples inside the chosen **region** and **time window**
 are pooled. Panels are skipped automatically if insufficient finite data exist.
 
 This script demonstrates:
-  • Domain-wide and region-specific stoichiometry–variable relationships
-  • Different time windows (e.g. JJA, Apr–Oct)
+  • Domain-wide and region-specific stoichiometry-variable relationships
+  • Different time windows (e.g. JJA, Apr-Oct)
   • Support for composites (e.g. phyto, chl) via GROUPS definitions
   • Automatic saving of figures under FIG_DIR/<basename(BASE_DIR)>/kde_stoichiometry/
 
@@ -74,8 +74,8 @@ REGIONS = [
 # ---------------------------------------------------------------------
 # Time windows (examples)
 # ---------------------------------------------------------------------
-MONTHS_JJA     = [6, 7, 8]                    # Jun–Aug
-MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10]       # Apr–Oct
+MONTHS_JJA     = [6, 7, 8]                    # Jun-Aug
+MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10]       # Apr-Oct
 YEARS_2018     = [2018]
 
 # ---------------------------------------------------------------------
@@ -100,7 +100,7 @@ def main():
         warnings.filterwarnings("default")
     xr.set_options(use_new_combine_kwarg_defaults=True)
 
-    print(hr("=")); print("KDE Stoichiometry examples (2×2 density: N:C/P:C × variable)"); print(hr("="))
+    print(hr("=")); print("KDE Stoichiometry examples (2x2 density: N:C/P:C x variable)"); print(hr("="))
 
     # Discover & load
     info(" Discovering files")
@@ -139,10 +139,10 @@ def main():
     )
 
     # ===============================================================
-    # 2) REGION • Apr–Oct 2018 • group=P5 • variable=phyto (composite)
+    # 2) REGION • Apr-Oct 2018 • group=P5 • variable=phyto (composite)
     # ===============================================================
     if REGIONS:
-        info(" Example 2: REGION(Central) • Apr–Oct 2018 • group=P5 • variable=phyto")
+        info(" Example 2: REGION(Central) • Apr-Oct 2018 • group=P5 • variable=phyto")
         bullet("Pools all samples inside polygon; skips panels lacking finite data.")
         plot_call(
             kde_stoichiometry_2x2,

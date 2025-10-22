@@ -68,8 +68,8 @@ STATION = ("WE12", 41.90, -83.10)  # (name, lat, lon)
 # -----------------------------------------------------------------------------
 # Time windows
 # -----------------------------------------------------------------------------
-MONTHS_JJA     = [6, 7, 8]              # Jun–Aug
-MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10] # Apr–Oct
+MONTHS_JJA     = [6, 7, 8]              # Jun-Aug
+MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10] # Apr-Oct
 YEARS_2018     = [2018]
 
 
@@ -138,9 +138,9 @@ def main():
     )
 
     # =========================================================================
-    # 2) REGION (Central) • Apr–Oct 2018 • Surface/Bottom composition
+    # 2) REGION (Central) • Apr-Oct 2018 • Surface/Bottom composition
     # =========================================================================
-    info(" Example 2: REGION(Central) • Apr–Oct 2018 • Surface/Bottom composition")
+    info(" Example 2: REGION(Central) • Apr-Oct 2018 • Surface/Bottom composition")
     plot_call(
         composition_surface_bottom,
         ds=ds,
@@ -179,9 +179,9 @@ def main():
     )
     
     # =========================================================================
-    # 5) DOMAIN • Apr–Oct 2018 • Surface — Fraction time-series
+    # 5) DOMAIN • Apr-Oct 2018 • Surface - Fraction time-series
     # =========================================================================
-    info(" Example 5: DOMAIN • Apr–Oct 2018 • Surface — Fraction time-series")
+    info(" Example 5: DOMAIN • Apr-Oct 2018 • Surface - Fraction time-series")
     phy_path, zoo_path = composition_fraction_timeseries(
         ds,
         phyto_vars=PHYTO_VARS, zoo_vars=ZOO_VARS,
@@ -197,9 +197,9 @@ def main():
     if zoo_path: kv("Saved (Zoo TS)",   zoo_path)
 
     # =========================================================================
-    # 6) REGIONS • Apr–Oct 2018 • Surface — Fraction time-series
+    # 6) REGIONS • Apr-Oct 2018 • Surface - Fraction time-series
     # =========================================================================
-    info(" Example 6: REGIONS • Apr–Oct 2018 • Surface — Fraction time-series")
+    info(" Example 6: REGIONS • Apr-Oct 2018 • Surface - Fraction time-series")
     bullet("One figure with N stacked panels (one per region)")
     phy_path, zoo_path = composition_fraction_timeseries(
         ds,
@@ -216,9 +216,9 @@ def main():
     if zoo_path: kv("Saved (Zoo TS, regions)",   zoo_path)
 
     # =========================================================================
-    # 7) STATIONS • Apr–Oct 2018 • Surface — Fraction time-series
+    # 7) STATIONS • Apr-Oct 2018 • Surface - Fraction time-series
     # =========================================================================
-    info(" Example 7: STATIONS • Apr–Oct 2018 • Surface — Fraction time-series")
+    info(" Example 7: STATIONS • Apr-Oct 2018 • Surface - Fraction time-series")
     bullet("One figure with N stacked panels (one per station)")
     phy_path, zoo_path = composition_fraction_timeseries(
         ds,

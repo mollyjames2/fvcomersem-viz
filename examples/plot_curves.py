@@ -5,12 +5,12 @@ Curves diagnostics demo
 -----------------------
 
 This script demonstrates how to use `fvcomersemviz.plots.curves.plot_curves`
-to make general x–y diagnostics from FVCOM–ERSEM output.
+to make general x-y diagnostics from FVCOM-ERSEM output.
 
 Examples included:
-  1) Light vs Chlorophyll — surface — JJA 2018 — Central vs East (binned)
-  2) Temperature vs Total Phytoplankton C — depth_avg — Apr–Oct 2018 — Domain (binned)
-  3) Temperature vs P5_Cfix (rate) — depth_avg — Apr–Oct 2018 — Domain (binned)
+  1) Light vs Chlorophyll - surface - JJA 2018 - Central vs East (binned)
+  2) Temperature vs Total Phytoplankton C - depth_avg - Apr-Oct 2018 - Domain (binned)
+  3) Temperature vs P5_Cfix (rate) - depth_avg - Apr-Oct 2018 - Domain (binned)
 
 Edit BASE_DIR / FILE_PATTERN / FIG_DIR and region shapefile paths before running.
 
@@ -50,13 +50,13 @@ REGIONS = [
     ("Central", {"shapefile": "../data/shapefiles/central_basin_single.shp"}),
     ("East",    {"shapefile": "../data/shapefiles/east_basin_single.shp"}),
 ]
-STATION = ("WE12", 41.90, -83.10)  # (name, lat, lon) — not used below, but handy
+STATION = ("WE12", 41.90, -83.10)  # (name, lat, lon) - not used below, but handy
 
 # ----------------------------------------------------------------------------- #
 # Time windows
 # ----------------------------------------------------------------------------- #
-MONTHS_JJA     = [6, 7, 8]              # Jun–Aug
-MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10] # Apr–Oct
+MONTHS_JJA     = [6, 7, 8]              # Jun-Aug
+MONTHS_APR_OCT = [4, 5, 6, 7, 8, 9, 10] # Apr-Oct
 YEARS_2018     = [2018]
 
 # ----------------------------------------------------------------------------- #
@@ -106,9 +106,9 @@ def main():
     kv("Filename prefix", prefix)
 
     # ========================================================================= #
-    # 1) Light vs Chlorophyll — surface — JJA 2018 — Central vs East (binned)
+    # 1) Light vs Chlorophyll - surface - JJA 2018 - Central vs East (binned)
     # ========================================================================= #
-    info(" Example 1: Light vs Chlorophyll — surface — JJA 2018 — Central vs East")
+    info(" Example 1: Light vs Chlorophyll - surface - JJA 2018 - Central vs East")
     bullet("Binned median with IQR shading; daylight only; one curve per region")
     specs_light_chl = [
         {
@@ -144,9 +144,9 @@ def main():
     kv("Saved", out1)
 
     # ========================================================================= #
-    # 2) Temperature vs Total Phytoplankton C — depth_avg — Apr–Oct 2018 — Domain
+    # 2) Temperature vs Total Phytoplankton C - depth_avg - Apr-Oct 2018 - Domain
     # ========================================================================= #
-    info(" Example 2: Temperature vs Total Phytoplankton C — depth_avg — Apr–Oct 2018 — Domain")
+    info(" Example 2: Temperature vs Total Phytoplankton C - depth_avg - Apr-Oct 2018 - Domain")
     bullet("Binned median with IQR shading; domain-wide depth-average")
     specs_temp_phytoC = [{
         "name": "Domain",
@@ -168,9 +168,9 @@ def main():
     kv("Saved", out2)
 
     # ========================================================================= #
-    # 3) Temperature vs P5_Cfix (rate) — depth_avg — Apr–Oct 2018 — Domain
+    # 3) Temperature vs P5_Cfix (rate) - depth_avg - Apr-Oct 2018 - Domain
     # ========================================================================= #
-    info(" Example 3: Temperature vs P5_Cfix (rate) — depth_avg — Apr–Oct 2018 — Domain")
+    info(" Example 3: Temperature vs P5_Cfix (rate) - depth_avg - Apr-Oct 2018 - Domain")
     bullet("Binned median with IQR shading; group-specific productivity rate (P5 only)")
     specs_temp_p5rate = [{
         "name": "Domain",
@@ -192,10 +192,10 @@ def main():
     kv("Saved", out3)
     
     # ============================================================================
-    # 4) Temperature vs P5_Cfix (rate) — depth_avg — Apr–Oct 2018 — Domain
+    # 4) Temperature vs P5_Cfix (rate) - depth_avg - Apr-Oct 2018 - Domain
     #    Binned backbone + scatter context (same x/y, same filters/scope/depth)
     # ============================================================================
-    info(" Example 4: Temperature vs P5_Cfix (rate) — depth_avg — Apr–Oct 2018 — Domain")
+    info(" Example 4: Temperature vs P5_Cfix (rate) - depth_avg - Apr-Oct 2018 - Domain")
     bullet("Scatter cloud for context + binned median with IQR backbone (P5 only)")
     
     specs_temp_p5rate_backbone = [
@@ -212,7 +212,7 @@ def main():
             "x_label": "Temperature (°C)",
             "y_label": "P5 carbon fixation rate (P5_Cfix)",
         },
-        # 2) Binned median + IQR “backbone” (drawn second → on top)
+        # 2) Binned median + IQR "backbone" (drawn second → on top)
         {
             "name": "Median (IQR)",
             "x": "temp",
