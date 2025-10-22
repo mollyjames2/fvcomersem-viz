@@ -1,3 +1,6 @@
+[![CI (conda env + editable install)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml/badge.svg)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml)[![GitHub release](https://img.shields.io/github/v/release/mollyjames2/fvcomersem-viz)](https://github.com/mollyjames2/fvcomersem-viz/releases)[![License](https://img.shields.io/github/license/mollyjames2/fvcomersem-viz)](LICENSE)[![Issues](https://img.shields.io/github/issues/mollyjames2/fvcomersem-viz)](https://github.com/mollyjames2/fvcomersem-viz/issues)
+
+
 # fvcomersem-viz
 
 Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reproducible figures and animations: time-series, plan-view maps, Hovmöller sections, x–y “curves” diagnostics, stoichiometry KDEs, and more.
@@ -57,7 +60,7 @@ python tests/check_install.py
 
 ## Examples
 
-Browse and run the ready-to-use scripts in the **[examples/](https://github.com/mollyjames2/fvcomersem-viz/tree/main/examples)** folder.
+Browse and run the ready-to-use scripts in the **[examples/](https://github.com/mollyjames2/fvcomersem-viz/tree/main/examples)** folder or run the notebooks in the **[notebooks]** folder in jupyter notebook
 
 ---
 
