@@ -1,0 +1,50 @@
+name: CI (conda env + editable install)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  conda-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11']  # add '3.10','3.12' if you like
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Fast, cached conda env setup with conda-forge
+      - name: Set up micromamba (conda-forge)
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: fviz
+          cache-downloads: true
+          cache-environment: true
+          # same stack you use locally (+ pip so we can do pip -e .)
+          create-args: >-
+            python=${{ matrix.python-version }}
+            geopandas
+            shapely
+            pyproj
+            rtree
+            notebook
+            pip
+          channels: conda-forge
+
+      # Editable install (pip -e .) inside the conda env
+      - name: Editable install
+        run: micromamba run -n fviz pip install -e .
+
+      # Optional: show what got installed (good for debugging)
+      - name: Show environment
+        run: |
+          micromamba run -n fviz python -V
+          micromamba run -n fviz python -c "import sys, fvcomersemviz; print('fvcomersemviz', getattr(fvcomersemviz,'__version__','?')); print('site:', sys.executable)"
+
+      # Your existing install check
+      - name: Check installation
+        run: micromamba run -n fviz python tests/check_install.py
+
