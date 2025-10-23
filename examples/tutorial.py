@@ -295,6 +295,10 @@ plot_animate = True
 # ------Loading the data-------
 
 # Imports
+import os
+os.environ["MPLBACKEND"] = "Agg"   # or do this in your shell: export MPLBACKEND=Agg
+import matplotlib
+matplotlib.use("Agg")              # safe even if env var set
 import matplotlib.pyplot as plt
 from IPython.display import display
 import numpy as np
@@ -696,16 +700,16 @@ if plot_timeseries:
   # Examples:
   
   # Domain three-panel - DOC (full run)
- domain_three_panel(
-      ds=ds,
-      variables=["DOC"],
-      base_dir=BASE_DIR,
-      figures_root=FIG_DIR,
-      groups=GROUPS,
-      styles=PLOT_STYLES,
-      dpi=150,
-      verbose=False,
-  )
+  domain_three_panel(
+        ds=ds,
+        variables=["DOC"],
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        groups=GROUPS,
+        styles=PLOT_STYLES,
+        dpi=150,
+        verbose=False,
+    )
   
   #5) Station-specific Three-panel Figures (Surface ±1σ, Bottom ±1σ, Profile mean ±1σ) (1 figure with 3 subplots)
   # Full argument reference for station_three_panel(...)
@@ -1438,7 +1442,7 @@ if plot_kde:
       base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
       min_samples=200, scatter_underlay=800,
       styles=PLOT_STYLES if "PLOT_STYLES" in globals() else None,
-      FAST,
+      **FAST,
   )
   
   # REGION • Apr-Oct 2018 • group=P5 • variable=phyto (composite)
@@ -1452,7 +1456,7 @@ if plot_kde:
           base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
           min_samples=200, scatter_underlay=1200,
           styles=PLOT_STYLES if "PLOT_STYLES" in globals() else None,
-          FAST,
+          **FAST,
       )
   
   # DOMAIN • full run • group=P5 • variable=chl (composite)
@@ -1465,7 +1469,7 @@ if plot_kde:
       base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
       min_samples=300, scatter_underlay=1500,
       styles=PLOT_STYLES if "PLOT_STYLES" in globals() else None,
-      FAST,
+      **FAST,
   )
   
   # REGION COMPARISON • JJA 2018 • group=P5 • variable=P5_c (first two regions if available)
@@ -1480,7 +1484,7 @@ if plot_kde:
               base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
               min_samples=180, scatter_underlay=800,
               styles=PLOT_STYLES if "PLOT_STYLES" in globals() else None,
-              FAST,
+              **FAST,
           )
   
   print(" KDE stoichiometry examples completed. Figures saved under:", FIG_DIR)
@@ -1712,7 +1716,20 @@ if plot_kde:
 
 
 if plot_composition:
-  
+  PHYTO_VARS = GROUPS["phyto"]
+  ZOO_VARS = GROUPS["zoo"]
+
+  colours = {
+      # phyto
+      "P1_c": "#1f77b4",  # blue
+      "P2_c": "#ff7f0e",  # orange
+      "P4_c": "#2ca02c",  # green
+      "P5_c": "#FFFF00",  # yellow
+      # zoo
+      "Z4_c": "#d62728",  # red
+      "Z5_c": "#9467bd",  # purple
+       "Z6_c": "#8c564b",  # brown
+    }  
   from fvcomersemviz.plots.composition import (
       composition_surface_bottom,
       composition_depth_average_single,
@@ -1820,7 +1837,7 @@ if plot_composition:
 #Examples:
 
 if plot_curves:
-from fvcomersemviz.plots.curves import plot_curves
+  from fvcomersemviz.plots.curves import plot_curves
 
   # We use different groups / variables for this example - so we will need to update the GROUPS dictionary
   GROUPS = {
