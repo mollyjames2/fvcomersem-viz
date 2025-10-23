@@ -1,34 +1,67 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=69", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fvcomersemviz"
-version = "0.0.1"
-description = "Skeleton for FVCOM–ERSEM plotting package (function-first API, no CLI)."
+name = "fvcomersem-viz"
+description = "Visualization helpers for FVCOM-ERSEM model outputs."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
-authors = [{ name = "Your Name", email = "you@example.com" }]
+license = { file = "LICENSE" }
+authors = [{ name = "Molly James" }]
+keywords = ["fvcom", "ersem", "oceanography", "lake", "viz", "xarray", "geopandas"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering",
+]
+# Version comes from git tags via setuptools-scm (see [tool.setuptools_scm])
+dynamic = ["version"]
 
+# Runtime dependencies installed automatically by pip
 dependencies = [
   "numpy>=1.23",
-  "pandas>=2.0",
-  "xarray>=2023.8.0",
+  "pandas>=1.5",
+  "xarray>=2023.7",
   "matplotlib>=3.7",
-  "cmocean>=3.0",
-  "scipy>=1.10",
+  "geopandas>=0.13",
   "shapely>=2.0",
   "pyproj>=3.5",
-  "geopandas>=0.14",
-  "cftime>=1.6",      
-  "netCDF4>=1.6.5",
-  "notebook>=7.4.7",
-  "dask[array]>=2024.5.0",
+  "rtree>=1.0",
+  "netCDF4>=1.6",
+  "scipy>=1.10"
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=7",
+  "ruff>=0.3",
+]
+notebook = [
+  "jupyterlab>=4",
+  "notebook>=7",
+]
+
+[project.urls]
+Homepage = "https://github.com/mollyjames2/fvcomersem-viz"
+Repository = "https://github.com/mollyjames2/fvcomersem-viz"
+Issues = "https://github.com/mollyjames2/fvcomersem-viz/issues"
+
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["fvcomersemviz*"]
+
+# include non-Python files if you ship any (adjust as needed)
+[tool.setuptools.package-data]
+fvcomersemviz = ["data/**/*"]
+
+# setuptools-scm: derive version from git tags and write a version file for runtime
+[tool.setuptools_scm]
+write_to = "src/fvcomersemviz/_version.py"
+

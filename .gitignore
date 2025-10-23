@@ -10,3 +10,4 @@ dist/
 .DS_Store
 # Ignore NFS temporary files
 **/.nfs*
+src/fvcomersemviz/_version.py
