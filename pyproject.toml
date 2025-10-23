@@ -4,24 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fvcomersemviz"
-version = "0.0.1"                       # ← static; bump manually 
-description = "FVCOM-ERSEM visualization utilities"
+version = "0.0.1"
+description = "FVCOM-ERSEM visualisation utilities"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Molly James" }]
-
-# Leave this empty because CI installs runtime deps via micromamba.
-# (Add them later when I want pip users to get deps automatically.)
 dependencies = []
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-packages = { find = {} }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# (Optional) test/dev extras for local pip users:
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 
