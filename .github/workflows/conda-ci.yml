@@ -27,7 +27,7 @@ jobs:
             python=${{ matrix.python-version }}
             xarray dask netcdf4 scipy numpy pandas matplotlib
             cartopy geopandas shapely pyproj rtree
-            notebook pip
+            notebook pip pytest ruff
 
           cache-downloads: true
           cache-environment: true
