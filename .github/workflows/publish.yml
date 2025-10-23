@@ -1,6 +1,7 @@
 name: Publish to PyPI
 
 on:
+  workflow_dispatch:           # <-- this makes it show in Actions immediately
   push:
     tags:
       - "v*"
@@ -9,13 +10,15 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     environment: pypi
-
     steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Clean workspace
+        run: rm -rf dist build *.egg-info src/*.egg-info
 
       - name: Set up Python
         uses: actions/setup-python@v5
