@@ -6,7 +6,7 @@ except Exception:
     except ImportError:  # for very old Pythons (not expected)
         from importlib_metadata import version, PackageNotFoundError  # type: ignore
     try:
-        __version__ = version("fvcomersem-viz")
+        __version__ = version("fvcomersemviz")
     except PackageNotFoundError:
         __version__ = "0+unknown"
 

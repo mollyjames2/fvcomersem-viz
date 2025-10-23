@@ -1,4 +1,3 @@
-# .github/workflows/conda-ci.yml
 name: Build and test
 
 on:
@@ -11,33 +10,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11']  # add '3.10','3.12' if you like
+        python-version: ['3.11']
 
     steps:
-      - name: Checkout
+      - name: Check out
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Set up micromamba (conda-forge)
+      - name: Set up micromamba
         uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: fviz
-          condarc: |
-            channels:
-              - conda-forge
-            channel_priority: strict
           create-args: >-
             python=${{ matrix.python-version }}
-            geopandas shapely pyproj rtree notebook pip
+            xarray dask netcdf4 scipy numpy pandas matplotlib
+            cartopy geopandas shapely pyproj rtree
+            notebook pip
+
           cache-downloads: true
           cache-environment: true
 
-      - name: Editable install (pip -e .)
+      - name: Editable install
         run: micromamba run -n fviz pip install -e .
 
       - name: Show environment
         run: |
           micromamba run -n fviz python -V
-          micromamba run -n fviz python -c "import sys, fvcomersemviz; print('fvcomersemviz', getattr(fvcomersemviz,'__version__','?')); print('python:', sys.executable)"
+          micromamba run -n fviz python -c "import sys, importlib.metadata as im; print('pkg version:', im.version('fvcomersemviz')); print('python:', sys.executable)"
 
       - name: Check installation
         run: micromamba run -n fviz python tests/check_install.py
