@@ -1,5 +1,4 @@
-[![Build and test](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml/badge.svg)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/conda-ci.yml)
-
+[![Build and test](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/build-test.yml/badge.svg)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/build-test.yml)
 # fvcomersem-viz
 
 Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reproducible figures and animations: time-series, plan-view maps, Hovmöller sections, x–y “curves” diagnostics, stoichiometry KDEs, and more.
@@ -54,6 +53,7 @@ pip install -e .
 ```bash
 python tests/check_install.py
 ```
+
 
 ---
 
