@@ -2,7 +2,7 @@
 """
 check_fvcomersemviz_install.py
 
-Comprehensive readiness check for the fvcomersemviz / fvcomerse-viz package
+Comprehensive readiness check for the fvcomersemviz / fvcomersem-viz package
 and its runtime dependencies.
 """
 
@@ -14,6 +14,7 @@ import importlib
 import traceback
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict, Set
+from pathlib import Path
 
 try:
     # Python 3.8+
@@ -26,7 +27,7 @@ except Exception:  # pragma: no cover
 DIST_CANDIDATES = [
     # distribution names (PyPI-style)
     "fvcomersemviz",
-    "fvcomerse-viz",
+    "fvcomersem-viz",
 ]
 
 MODULE_CANDIDATES = [
@@ -70,19 +71,46 @@ def import_module_any(candidates: List[str]) -> Tuple[Optional[object], str, Lis
             tried.append(f"{name} ({e.__class__.__name__}: {e})")
     return None, "", tried
 
-
 def distribution_any(candidates: List[str]) -> Tuple[Optional[importlib_metadata.Distribution], str, List[str]]:
     tried = []
     for dist_name in candidates:
-        try:
-            dist = importlib_metadata.distribution(dist_name)
-            return dist, dist_name, tried
-        except importlib_metadata.PackageNotFoundError as e:
-            tried.append(f"{dist_name} (not found)")
-        except Exception as e:
-            tried.append(f"{dist_name} ({e.__class__.__name__}: {e})")
+        d = prefer_installed_distribution(dist_name)
+        if d is not None:
+            return d, dist_name, tried
+        tried.append(f"{dist_name} (not found)")
     return None, "", tried
 
+def _dist_path(d: importlib_metadata.Distribution) -> Path:
+    # importlib.metadata doesn't expose a public path attr; this works across impls
+    return Path(getattr(d, "_path", d.locate_file("")))
+
+def _is_site_packages(p: Path) -> bool:
+    s = str(p)
+    return ("site-packages" in s) or ("dist-packages" in s)
+
+def prefer_installed_distribution(dist_name: str) -> Optional[importlib_metadata.Distribution]:
+    """
+    Return the fvcomersemviz distribution that lives in site-packages/dist-packages,
+    ignoring in-tree egg-info produced by editable installs.
+    """
+    matches = []
+    for d in importlib_metadata.distributions():
+        try:
+            if d.metadata.get("Name") == dist_name:
+                matches.append(d)
+        except Exception:
+            continue
+    if not matches:
+        # fall back to the default resolver (may return the in-tree egg-info)
+        try:
+            return importlib_metadata.distribution(dist_name)
+        except Exception:
+            return None
+    # Prefer the one installed in site-/dist-packages
+    for d in matches:
+        if _is_site_packages(_dist_path(d)):
+            return d
+    return matches[0]
 
 _REQ_PATTERN = re.compile(r"^\s*([A-Za-z0-9_.\-]+)")
 
@@ -128,19 +156,24 @@ def guess_top_level_modules(dist: importlib_metadata.Distribution) -> Set[str]:
         modules.add(norm)
     return modules
 
-
 def try_import_distribution(dist_name: str) -> Tuple[bool, List[str]]:
     """
-    Try to import at least one plausible top-level module for this distribution.
+    Try to import at least one plausible top-level module for the given
+    distribution. Prefers the distribution record that lives in site-/dist-packages,
+    ignoring in-tree egg-info created by editable installs.
     """
     msgs: List[str] = []
-    try:
-        dist = importlib_metadata.distribution(dist_name)
-    except Exception as e:
-        msgs.append(f"Could not load distribution metadata for {dist_name}: {e}")
+
+    # Prefer the installed dist-info under site-/dist-packages
+    dist = prefer_installed_distribution(dist_name)
+    if dist is None:
+        msgs.append(f"Could not load distribution metadata for {dist_name}")
         return False, msgs
 
+    # Derive likely importable top-level module names from the dist contents
     candidates = list(guess_top_level_modules(dist))
+
+    # Try each candidate
     for modname in candidates:
         try:
             importlib.import_module(modname)
@@ -149,8 +182,8 @@ def try_import_distribution(dist_name: str) -> Tuple[bool, List[str]]:
         except Exception as e:
             msgs.append(f"Import '{modname}' failed: {e.__class__.__name__}: {e}")
 
-    # Final heuristic: hyphen->underscore direct import attempt
-    fallback = dist_name.replace("-", "_")
+    # Final heuristic: hyphen→underscore of the dist name
+    fallback = dist.metadata.get("Name", dist_name).replace("-", "_")
     if fallback not in candidates:
         try:
             importlib.import_module(fallback)
@@ -160,13 +193,19 @@ def try_import_distribution(dist_name: str) -> Tuple[bool, List[str]]:
             msgs.append(f"Import fallback '{fallback}' failed: {e.__class__.__name__}: {e}")
 
     return False, msgs
+    
 
 
 def version_of(dist_name: str) -> Optional[str]:
+    d = prefer_installed_distribution(dist_name)
+    if d is not None:
+        try:
+            return d.metadata.get("Version")
+        except Exception:
+            pass
     try:
         return importlib_metadata.version(dist_name)
     except Exception:
-        # Sometimes the dist name differs from the import name; nothing fatal.
         return None
 
 
@@ -175,7 +214,7 @@ def version_of(dist_name: str) -> Optional[str]:
 def main(argv: Optional[List[str]] = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="fvcomersemviz / fvcomerse-viz installation check")
+    parser = argparse.ArgumentParser(description="fvcomersemviz / fvcomersem-viz installation check")
     parser.add_argument("--verbose", action="store_true", help="Show detailed output")
     args = parser.parse_args(argv)
 
@@ -272,7 +311,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def summarize_and_exit(results: List[CheckResult]) -> None:
-    print("\n=== fvcomersemviz / fvcomerse-viz Readiness Summary ===")
+    print("\n=== fvcomersemviz / fvcomersem-viz Readiness Summary ===")
     width = max(len(r.name) for r in results) + 2
     for r in results:
         status = "OK"
