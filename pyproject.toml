@@ -1,67 +1,27 @@
 [build-system]
-requires = ["setuptools>=69", "wheel", "setuptools-scm>=8"]
+requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fvcomersemviz"
-description = "Visualization helpers for FVCOM-ERSEM model outputs."
+version = "0.0.1"                       # ← static; bump manually 
+description = "FVCOM-ERSEM visualization utilities"
 readme = "README.md"
-requires-python = ">=3.9"
-license = { file = "LICENSE" }
+requires-python = ">=3.11"
 authors = [{ name = "Molly James" }]
-keywords = ["fvcom", "ersem", "oceanography", "lake", "viz", "xarray", "geopandas"]
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3 :: Only",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent",
-  "Intended Audience :: Science/Research",
-  "Topic :: Scientific/Engineering",
-]
-# Version comes from git tags via setuptools-scm (see [tool.setuptools_scm])
-dynamic = ["version"]
 
-# Runtime dependencies installed automatically by pip
-dependencies = [
-  "numpy>=1.23",
-  "pandas>=1.5",
-  "xarray>=2023.7",
-  "matplotlib>=3.7",
-  "geopandas>=0.13",
-  "shapely>=2.0",
-  "pyproj>=3.5",
-  "rtree>=1.0",
-  "netCDF4>=1.6",
-  "scipy>=1.10"
-]
-
-[project.optional-dependencies]
-dev = [
-  "pytest>=7",
-  "ruff>=0.3",
-]
-notebook = [
-  "jupyterlab>=4",
-  "notebook>=7",
-]
-
-[project.urls]
-Homepage = "https://github.com/mollyjames2/fvcomersem-viz"
-Repository = "https://github.com/mollyjames2/fvcomersem-viz"
-Issues = "https://github.com/mollyjames2/fvcomersem-viz/issues"
+# Leave this empty because CI installs runtime deps via micromamba.
+# (Add them later when I want pip users to get deps automatically.)
+dependencies = []
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+packages = { find = {} }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["fvcomersemviz*"]
 
-# include non-Python files if you ship any (adjust as needed)
-[tool.setuptools.package-data]
-fvcomersemviz = ["data/**/*"]
-
-# setuptools-scm: derive version from git tags and write a version file for runtime
-[tool.setuptools_scm]
-write_to = "src/fvcomersemviz/_version.py"
+# (Optional) test/dev extras for local pip users:
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
 
