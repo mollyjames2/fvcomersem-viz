@@ -1,0 +1,46 @@
+name: Build and test
+
+on:
+  push:
+    tags-ignore:
+      - '**'
+  pull_request:
+
+jobs:
+  conda-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: false
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: fviz
+          create-args: >-
+            python=${{ matrix.python-version }}
+            xarray dask netcdf4 scipy numpy pandas matplotlib
+            cartopy geopandas shapely pyproj rtree
+            notebook pip pytest ruff
+          cache-downloads: true
+          cache-environment: true
+
+      - name: Editable install
+        run: micromamba run -n fviz pip install -e .
+
+      - name: Show environment
+        run: |
+          micromamba run -n fviz python -V
+          micromamba run -n fviz python -c "import sys, importlib.metadata as im; print('pkg version:', im.version('fvcomersemviz')); print('python:', sys.executable)"
+
+      - name: Check installation
+        run: micromamba run -n fviz python tests/check_install.py
+
