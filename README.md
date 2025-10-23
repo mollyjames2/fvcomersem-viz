@@ -160,6 +160,78 @@ fvcomersem-viz/
 
 ## Contributing
 
+Contributions of all kinds are welcome: bug fixes, new features, documentation improvements, and ideas.
+
+### Quick start
+
+1. Clone the repository
+
+    git clone https://github.com/mollyjames2/fvcomersem-viz.git
+    cd fvcomersem-viz
+
+2. Create your development environment
+
+    Option A: conda (recommended)
+
+        conda create -n fviz python=3.11 geopandas shapely pyproj rtree notebook -c conda-forge
+        conda activate fviz
+        pip install -e .[dev]
+
+    Option B: virtual environment
+
+        python -m venv .venv
+        . .venv/bin/activate
+        pip install -e .[dev]
+
+3. Create a branch for your change
+
+        git checkout dev
+        git pull
+        git checkout -b feat/my-change
+
+4. Make and test your edits
+
+        python tests/check_install.py
+        git add -A
+        git commit -m "feat: brief summary of your change"
+        git push -u origin feat/my-change
+
+5. Open a Pull Request
+
+    - Base branch: dev
+    - Add a clear title and short description
+    - Continuous Integration (CI) will run automatically
+
+After review and merge, your branch will be deleted automatically.
+
+### More information
+
+See the full Contributing Guide (CONTRIBUTING.md) and Releasing Guide (RELEASING.md)
+for details on branching, review, and release workflows.
+
+
+### Maintainer note
+
+The fvcomersem-viz package follows a simple branching and release workflow:
+
+- Development work happens on the dev branch.
+- Stable releases live on the main branch.
+- Version numbers come automatically from git tags (using setuptools-scm).
+- When a tag starting with v is pushed to main (for example v1.0.0),
+  a GitHub Action builds the package and publishes it to PyPI.
+
+This means that regular development commits on dev are not published until they are
+merged into main and tagged as a release. Each tag on main creates a new version on
+PyPI that users can install with:
+
+    pip install fvcomersem-viz
+
+Small bug fixes may be applied directly to main as a hotfix and tagged as a patch
+release (for example v1.0.1). Larger changes and new features are developed and tested
+on dev before being merged and released.
+
+For more details on releases and versioning, see RELEASING.md.
+
 Issues and pull requests are welcome. For development, use `pip install -e .`, run `python tests/check_install.py`, and follow standard Git practices (feature branches + PRs).
 
 ---
