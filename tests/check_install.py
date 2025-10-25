@@ -1,43 +1,59 @@
 #!/usr/bin/env python
 """
-check_fvcomersemviz_install.py
+check_install.py - User-facing installation check for fvcomersemviz.
 
-Comprehensive readiness check for the fvcomersemviz / fvcomersem-viz package
-and its runtime dependencies.
+Checks:
+  - Python >= 3.11
+  - Package import works
+  - Distribution and version found
+  - Declared runtime dependencies (from pyproject) are present
+  - Recommended environment (conda) packages are present (warn-only)
+  - Basic smoke test (dir())
+
+Does NOT check:
+  - Dev tools (pytest, ruff, etc.)
 """
 
 from __future__ import annotations
-
 import sys
 import re
 import importlib
 import traceback
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Dict, Set
+from typing import List, Optional, Tuple, Sequence
 from pathlib import Path
 
 try:
-    # Python 3.8+
-    from importlib import metadata as importlib_metadata
+    from importlib import metadata as importlib_metadata  # Python 3.8+
 except Exception:  # pragma: no cover
     import importlib_metadata  # type: ignore
 
-# --------------------------- Configuration -------------------------------- #
 
-DIST_CANDIDATES = [
-    # distribution names (PyPI-style)
-    "fvcomersemviz",
-    "fvcomersem-viz",
-]
+# --------------------------- Configuration --------------------------- #
 
-MODULE_CANDIDATES = [
-    # importable module names (Python package-style)
-    "fvcomersemviz",
-]
+MIN_PYTHON = (3, 11)
+DIST_CANDIDATES = ["fvcomersemviz", "fvcomersem-viz"]
+MODULE_CANDIDATES = ["fvcomersemviz"]
 
-MIN_PYTHON = (3, 8)
+# Recommended environment (conda) stack to report to users
+# Each item: (distribution-name, import-name, [alt-dist-names...])
+RECOMMENDED_ENV: Sequence[Tuple[str, str, Sequence[str]]] = (
+    ("numpy", "numpy", ()),
+    ("scipy", "scipy", ()),
+    ("pandas", "pandas", ()),
+    ("xarray", "xarray", ()),
+    ("dask", "dask", ()),
+    ("netCDF4", "netCDF4", ("netcdf4",)),  # metadata dist is "netCDF4"
+    ("matplotlib", "matplotlib", ()),
+    ("cartopy", "cartopy", ()),
+    ("geopandas", "geopandas", ()),
+    ("Shapely", "shapely", ("shapely",)),  # metadata dist may be "Shapely"
+    ("pyproj", "pyproj", ()),
+    ("Rtree", "rtree", ("rtree",)),        # metadata dist may be "Rtree"
+)
 
-# ----------------------------- Helpers ------------------------------------ #
+
+# --------------------------- Data Model ------------------------------ #
 
 @dataclass
 class CheckResult:
@@ -46,6 +62,8 @@ class CheckResult:
     detail: str = ""
     warn: bool = False
 
+
+# --------------------------- Helper Functions ------------------------ #
 
 def _print(msg: str, *, verbose: bool = True):
     if verbose:
@@ -61,8 +79,8 @@ def check_python(min_version: Tuple[int, int]) -> CheckResult:
     )
 
 
-def import_module_any(candidates: List[str]) -> Tuple[Optional[object], str, List[str]]:
-    tried = []
+def import_module_any(candidates: List[str]):
+    tried: List[str] = []
     for name in candidates:
         try:
             mod = importlib.import_module(name)
@@ -71,28 +89,19 @@ def import_module_any(candidates: List[str]) -> Tuple[Optional[object], str, Lis
             tried.append(f"{name} ({e.__class__.__name__}: {e})")
     return None, "", tried
 
-def distribution_any(candidates: List[str]) -> Tuple[Optional[importlib_metadata.Distribution], str, List[str]]:
-    tried = []
-    for dist_name in candidates:
-        d = prefer_installed_distribution(dist_name)
-        if d is not None:
-            return d, dist_name, tried
-        tried.append(f"{dist_name} (not found)")
-    return None, "", tried
 
 def _dist_path(d: importlib_metadata.Distribution) -> Path:
-    # importlib.metadata doesn't expose a public path attr; this works across impls
     return Path(getattr(d, "_path", d.locate_file("")))
+
 
 def _is_site_packages(p: Path) -> bool:
     s = str(p)
-    return ("site-packages" in s) or ("dist-packages" in s)
+    return "site-packages" in s or "dist-packages" in s
 
-def prefer_installed_distribution(dist_name: str) -> Optional[importlib_metadata.Distribution]:
-    """
-    Return the fvcomersemviz distribution that lives in site-packages/dist-packages,
-    ignoring in-tree egg-info produced by editable installs.
-    """
+
+def prefer_installed_distribution(
+    dist_name: str,
+) -> Optional[importlib_metadata.Distribution]:
     matches = []
     for d in importlib_metadata.distributions():
         try:
@@ -101,123 +110,85 @@ def prefer_installed_distribution(dist_name: str) -> Optional[importlib_metadata
         except Exception:
             continue
     if not matches:
-        # fall back to the default resolver (may return the in-tree egg-info)
         try:
             return importlib_metadata.distribution(dist_name)
         except Exception:
             return None
-    # Prefer the one installed in site-/dist-packages
     for d in matches:
         if _is_site_packages(_dist_path(d)):
             return d
     return matches[0]
 
-_REQ_PATTERN = re.compile(r"^\s*([A-Za-z0-9_.\-]+)")
+
+def distribution_any(candidates: List[str]):
+    tried: List[str] = []
+    for dist_name in candidates:
+        d = prefer_installed_distribution(dist_name)
+        if d is not None:
+            return d, dist_name, tried
+        tried.append(f"{dist_name} (not found)")
+    return None, "", tried
+
+
+_REQ_NAME = re.compile(r"^\s*([A-Za-z0-9_.\-]+)")
+_EXTRA_MARKER = re.compile(r";\s*extra\s*==", re.IGNORECASE)
 
 def parse_requirements(requires_dist: Optional[List[str]]) -> List[str]:
     """
-    Extract distribution names from Requires-Dist entries.
-    e.g., 'xarray (>=2023.1.0); python_version >= "3.8"' -> 'xarray'
+    Return only runtime requirements (exclude optional extras like dev/test).
+    We skip any Requires-Dist entry that has a marker like '; extra == "dev"'.
     """
     if not requires_dist:
         return []
     out: List[str] = []
-    for line in requires_dist:
-        m = _REQ_PATTERN.match(line or "")
+    for raw in requires_dist:
+        s = (raw or "").strip()
+        if not s or _EXTRA_MARKER.search(s):
+            continue  # ignore extras
+        m = _REQ_NAME.match(s)
         if m:
             out.append(m.group(1))
     return out
 
 
-def guess_top_level_modules(dist: importlib_metadata.Distribution) -> Set[str]:
-    """
-    Guess importable top-level module names from a distribution’s file list.
-    Falls back to common hyphen->underscore normalization.
-    """
-    modules: Set[str] = set()
-    try:
-        files = dist.files or []
-        for f in files:
-            parts = getattr(f, "parts", None) or str(f).split("/")
-            if not parts:
-                continue
-            top = parts[0]
-            # Skip metadata directories
-            if top.endswith(".dist-info") or top.endswith(".egg-info"):
-                continue
-            # Only consider plausible module/package names
-            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", top):
-                modules.add(top)
-    except Exception:
-        pass
-    if not modules:
-        # Heuristic: dist-name -> module-name
-        norm = re.sub(r"[^A-Za-z0-9_]", "_", dist.metadata["Name"]).lower()
-        modules.add(norm)
-    return modules
-
-def try_import_distribution(dist_name: str) -> Tuple[bool, List[str]]:
-    """
-    Try to import at least one plausible top-level module for the given
-    distribution. Prefers the distribution record that lives in site-/dist-packages,
-    ignoring in-tree egg-info created by editable installs.
-    """
-    msgs: List[str] = []
-
-    # Prefer the installed dist-info under site-/dist-packages
-    dist = prefer_installed_distribution(dist_name)
-    if dist is None:
-        msgs.append(f"Could not load distribution metadata for {dist_name}")
-        return False, msgs
-
-    # Derive likely importable top-level module names from the dist contents
-    candidates = list(guess_top_level_modules(dist))
-
-    # Try each candidate
-    for modname in candidates:
-        try:
-            importlib.import_module(modname)
-            msgs.append(f"Imported '{modname}' OK")
-            return True, msgs
-        except Exception as e:
-            msgs.append(f"Import '{modname}' failed: {e.__class__.__name__}: {e}")
-
-    # Final heuristic: hyphen→underscore of the dist name
-    fallback = dist.metadata.get("Name", dist_name).replace("-", "_")
-    if fallback not in candidates:
-        try:
-            importlib.import_module(fallback)
-            msgs.append(f"Imported fallback '{fallback}' OK")
-            return True, msgs
-        except Exception as e:
-            msgs.append(f"Import fallback '{fallback}' failed: {e.__class__.__name__}: {e}")
-
-    return False, msgs
-    
-
-
 def version_of(dist_name: str) -> Optional[str]:
-    d = prefer_installed_distribution(dist_name)
-    if d is not None:
-        try:
-            return d.metadata.get("Version")
-        except Exception:
-            pass
     try:
         return importlib_metadata.version(dist_name)
     except Exception:
         return None
 
 
-# ----------------------------- Main logic --------------------------------- #
+def version_of_any(names: Sequence[str]) -> Optional[str]:
+    for n in names:
+        v = version_of(n)
+        if v is not None:
+            return v
+    return None
+
+
+def summarize_and_exit(results: List[CheckResult]) -> None:
+    print("\n=== fvcomersemviz Installation Summary ===")
+    width = max(len(r.name) for r in results) + 2
+    for r in results:
+        status = "OK" if r.ok else ("WARN" if r.warn else "FAIL")
+        print(f"{status:>4}  {r.name:<{width}} {r.detail}")
+    print("==========================================")
+    if any((not r.ok) and (not r.warn) for r in results):
+        print("One or more checks failed. Please review the FAIL items above.")
+    elif any(r.warn for r in results):
+        print("Environment looks usable, with warnings.")
+    else:
+        print("All good! fvcomersemviz and its dependencies look ready to run.")
+
+
+# --------------------------- Main Logic ------------------------------ #
 
 def main(argv: Optional[List[str]] = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="fvcomersemviz / fvcomersem-viz installation check")
+    parser = argparse.ArgumentParser(description="fvcomersemviz user installation check")
     parser.add_argument("--verbose", action="store_true", help="Show detailed output")
     args = parser.parse_args(argv)
-
     verbose = args.verbose
 
     results: List[CheckResult] = []
@@ -227,7 +198,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     results.append(r)
     _print(f"[{'OK' if r.ok else 'FAIL'}] {r.name} — {r.detail}", verbose=verbose)
 
-    # 2) Package import + __version__
+    # 2) Package import
     mod, used_mod, tried_mods = import_module_any(MODULE_CANDIDATES)
     if mod is None:
         detail = "Tried: " + "; ".join(tried_mods)
@@ -241,13 +212,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     if version_attr:
         _print(f"[OK] fvcomersemviz.__version__ = {version_attr}", verbose=True)
     else:
-        _print(f"[WARN] fvcomersemviz has no __version__ attribute", verbose=True)
+        _print("[WARN] fvcomersemviz has no __version__ attribute", verbose=True)
 
-    # 3) Distribution metadata (to get dependencies)
+    # 3) Distribution metadata (pyproject runtime deps)
     dist, dist_name, tried_dists = distribution_any(DIST_CANDIDATES)
     if dist is None:
         detail = "Could not find installed distribution. Tried: " + "; ".join(tried_dists)
-        results.append(CheckResult("Distribution lookup", ok=False, detail=detail))
+        results.append(CheckResult("Distribution located", ok=False, detail=detail))
         _print(f"[FAIL] {detail}", verbose=True)
         summarize_and_exit(results)
         return 1
@@ -256,79 +227,92 @@ def main(argv: Optional[List[str]] = None) -> int:
     _print(f"[OK] Distribution: {dist.metadata.get('Name', dist_name)} {this_version}", verbose=True)
     results.append(CheckResult("Distribution located", ok=True, detail=f"{dist_name} {this_version}"))
 
-    # 4) Dependencies: verify installed & importable
     reqs = parse_requirements(dist.requires or [])
-    if not reqs:
-        _print("[OK] No runtime dependencies listed in package metadata.", verbose=True)
+    if reqs:
+        _print(f"[INFO] Declared runtime dependencies ({len(reqs)}): {', '.join(reqs)}", verbose=True)
+        dep_failures: List[str] = []
+        dep_warnings: List[str] = []
+        for dep in reqs:
+            dep_ver = version_of(dep)
+            if dep_ver is None:
+                dep_failures.append(f"{dep}: not installed")
+                _print(f"[FAIL] {dep}: not installed", verbose=True)
+            else:
+                _print(f"[OK] {dep}: installed (version {dep_ver})", verbose=verbose)
+                try:
+                    importlib.import_module(dep.replace("-", "_"))
+                except Exception as e:
+                    dep_warnings.append(f"{dep}: installed but import failed ({e.__class__.__name__})")
+                    _print(f"[WARN] {dep}: installed but could not import top-level module.", verbose=True)
+
+        results.append(CheckResult(
+            "Dependencies installed",
+            ok=(len(dep_failures) == 0),
+            detail="All dependencies present" if not dep_failures else "; ".join(dep_failures),
+        ))
+        results.append(CheckResult(
+            "Dependency imports",
+            ok=True,
+            warn=(len(dep_warnings) > 0),
+            detail="All dependency imports succeeded" if not dep_warnings else "; ".join(dep_warnings),
+        ))
     else:
-        _print(f"[INFO] Declared dependencies ({len(reqs)}): {', '.join(reqs)}", verbose=True)
+        # No runtime deps declared; treat as managed via environment (conda).
+        _print("[INFO] Runtime dependencies declared in package metadata: none (using environment packages check below).", verbose=True)
+        results.append(CheckResult("Dependencies installed", ok=True, detail="Managed via environment"))
+        results.append(CheckResult("Dependency imports", ok=True, detail="Managed via environment"))
 
-    dep_failures: List[str] = []
-    dep_warnings: List[str] = []
+    # 4) Recommended environment packages (conda stack) - warn-only
+    missing_env: List[str] = []
+    detected_env: List[str] = []
+    for dist_name, import_name, alts in RECOMMENDED_ENV:
+        # Try to import the module (import_name) for a real runtime check
+        imported = True
+        try:
+            importlib.import_module(import_name)
+        except Exception:
+            imported = False
 
-    for dep in reqs:
-        dep_ver = version_of(dep)
-        if dep_ver is None:
-            dep_failures.append(f"{dep}: not installed")
-            _print(f"[FAIL] {dep}: not installed", verbose=True)
-            continue
-        _print(f"[OK] {dep}: installed (version {dep_ver})", verbose=verbose)
+        # Try to fetch a version from any of the candidate dist names
+        ver = version_of_any((dist_name, *alts))
 
-        ok_import, msgs = try_import_distribution(dep)
-        if ok_import:
-            _print("      " + " | ".join(msgs), verbose=verbose)
+        if imported and ver:
+            _print(f"[OK] {dist_name}: installed (version {ver})", verbose=verbose)
+            detected_env.append(f"{dist_name} {ver}")
+        elif imported:
+            _print(f"[OK] {dist_name}: installed (version unknown)", verbose=verbose)
+            detected_env.append(f"{dist_name} (version unknown)")
         else:
-            # Not always fatal—some packages provide console scripts or are extras.
-            dep_warnings.append(f"{dep}: installed but import check failed ({'; '.join(msgs)})")
-            _print(f"[WARN] {dep}: installed but could not import a top-level module.", verbose=True)
+            _print(f"[WARN] {dist_name}: not detected", verbose=True)
+            missing_env.append(dist_name)
 
-    # 5) Final smoke test (optional tiny usage)
-    # If the package exposes a simple function or CLI we could check it here.
-    # To stay generic (and safe), we just verify we can access __version__ and dir().
+    if detected_env:
+        results.append(CheckResult(
+            "Environment packages (recommended)",
+            ok=True,
+            detail="Detected: " + ", ".join(detected_env),
+            warn=bool(missing_env),
+        ))
+    if missing_env:
+        results.append(CheckResult(
+            "Environment packages missing (recommended)",
+            ok=True,  # warn-only for users
+            detail=", ".join(missing_env),
+            warn=True,
+        ))
+
+    # 5) Basic smoke test
     try:
         _ = dir(mod)
         results.append(CheckResult("Basic smoke test", ok=True, detail="dir() succeeded"))
-        _print("[OK] Basic smoke test passed (dir(mod) worked).", verbose=True)
+        _print("[OK] Basic smoke test passed.", verbose=True)
     except Exception as e:
         results.append(CheckResult("Basic smoke test", ok=False, detail=str(e)))
         _print(f"[FAIL] Basic smoke test failed: {e}", verbose=True)
 
-    # 6) Summarize and set exit code
-    if dep_failures:
-        results.append(CheckResult("Dependencies installed", ok=False, detail="; ".join(dep_failures)))
-    else:
-        results.append(CheckResult("Dependencies installed", ok=True, detail="All dependencies present"))
-
-    if dep_warnings:
-        results.append(CheckResult("Dependency imports", ok=True, warn=True, detail="; ".join(dep_warnings)))
-    else:
-        results.append(CheckResult("Dependency imports", ok=True, detail="All dependency imports succeeded"))
-
     summarize_and_exit(results)
-    # Exit non-zero if any hard failure
     hard_fail = any((not r.ok) and (not r.warn) for r in results)
     return 1 if hard_fail else 0
-
-
-def summarize_and_exit(results: List[CheckResult]) -> None:
-    print("\n=== fvcomersemviz / fvcomersem-viz Readiness Summary ===")
-    width = max(len(r.name) for r in results) + 2
-    for r in results:
-        status = "OK"
-        if not r.ok and not r.warn:
-            status = "FAIL"
-        elif r.warn:
-            status = "WARN"
-        line = f"{status:>4}  {r.name:<{width}} {r.detail}"
-        print(line)
-    print("========================================================")
-    # Suggest next step if failed
-    if any((not r.ok) and (not r.warn) for r in results):
-        print("One or more checks failed. Please review the FAIL items above.")
-    elif any(r.warn for r in results):
-        print("Environment looks usable, but there were warnings. Review them above.")
-    else:
-        print("All good! fvcomersemviz and its dependencies look ready to run.")
 
 
 if __name__ == "__main__":

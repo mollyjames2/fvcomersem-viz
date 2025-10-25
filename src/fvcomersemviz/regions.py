@@ -1,11 +1,11 @@
 
-from __future__ import annotations
 """
 Region helpers.
 
 """
 
-from typing import Optional, Tuple, Sequence, Dict, Any
+from __future__ import annotations
+from typing import Optional, Tuple, Dict, Any
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -15,13 +15,8 @@ from shapely.ops import unary_union
 from shapely.prepared import prep as prep_geom
 
 
-import xarray as xr
-
 # Add to src/fvcomersemviz/regions.py
 
-from typing import Optional, Tuple, Dict, Any
-import numpy as np
-import xarray as xr
 
 def nearest_node_index(ds: xr.Dataset, lat: float, lon: float) -> Optional[int]:
     """Nearest node by equirectangular distance; assumes 1D 'lat'/'lon' on node center."""
@@ -36,8 +31,9 @@ def nearest_node_index(ds: xr.Dataset, lat: float, lon: float) -> Optional[int]:
     dlat = np.deg2rad(lat_arr - lat)
     dlon = np.deg2rad(lon_arr - lon)
     w = np.cos(np.deg2rad(lat))
-    dist2 = (dlat**2) + (w * dlon)**2
+    dist2 = (dlat**2) + (w * dlon) ** 2
     return int(np.nanargmin(dist2))
+
 
 def apply_scope(
     ds: xr.Dataset,
@@ -51,8 +47,10 @@ def apply_scope(
         _, lat, lon = station
         idx = nearest_node_index(ds, lat, lon)
         if idx is not None:
-            if "node" in ds.dims: return ds.isel(node=idx)
-            if "nele" in ds.dims: return ds.isel(nele=idx)
+            if "node" in ds.dims:
+                return ds.isel(node=idx)
+            if "nele" in ds.dims:
+                return ds.isel(nele=idx)
             if verbose:
                 print("[regions/apply_scope] dataset not node/nele-centered; using as-is.")
         elif verbose:
@@ -82,7 +80,8 @@ def build_region_masks(
     try:
         if "shapefile" in spec:
             mask_nodes = polygon_mask_from_shapefile(
-                ds, spec["shapefile"],
+                ds,
+                spec["shapefile"],
                 name_field=spec.get("name_field"),
                 name_equals=spec.get("name_equals"),
             )
@@ -148,7 +147,7 @@ def polygon_mask_from_shapefile(
     shapefile: str,
     name_field: Optional[str] = None,
     name_equals: Optional[str] = None,
-    include_boundary: bool = True,   # NEW: inclusive by default
+    include_boundary: bool = True,  # NEW: inclusive by default
 ) -> np.ndarray:
     gdf = gpd.read_file(shapefile)
     if name_field is not None and name_equals is not None:
@@ -165,8 +164,8 @@ def polygon_from_csv_boundary(
     lat_col: str = "lat",
     *,
     normalize_lon: bool = True,
-    sort: str = "auto",          # "auto" (angle sort), "none"
-    convex_hull: bool = False,   # if True, ignore sort and use convex hull of points
+    sort: str = "auto",  # "auto" (angle sort), "none"
+    convex_hull: bool = False,  # if True, ignore sort and use convex hull of points
 ) -> Polygon:
     """
     Create a polygon from a CSV of boundary coordinates.
@@ -218,7 +217,7 @@ def polygon_mask(
     ds: xr.Dataset,
     polygon: Polygon,
     *,
-    include_boundary: bool = True,   # NEW: include boundary points
+    include_boundary: bool = True,  # NEW: include boundary points
 ) -> np.ndarray:
     """Boolean mask for nodes contained in the given polygon (union ok)."""
     lon, lat = _lon_lat_arrays(ds)
@@ -249,6 +248,7 @@ def polygon_mask_elements(
         f = np.frompyfunc(lambda x, y: P.contains(Point(x, y)), 2, 1)
     return f(lons, lats).astype(bool)
 
+
 def element_mask_from_node_mask(
     ds: xr.Dataset,
     node_mask: np.ndarray,
@@ -262,4 +262,3 @@ def element_mask_from_node_mask(
     strict=False -> (optional future) keep if >=2 of 3 nodes are inside.
     Returns None if 'nv' is missing or ill-shaped.
     """
-

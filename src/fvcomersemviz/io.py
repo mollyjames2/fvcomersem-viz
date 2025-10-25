@@ -17,7 +17,6 @@ import pandas as pd
 import xarray as xr
 
 
-
 # --------------------------
 # Time filtering
 # --------------------------
@@ -69,6 +68,7 @@ def filter_time(
     else:
         return ds.sel({time_var: tindex[mask]})
 
+
 # --------------------------
 # Group / variable resolver (optional but recommended to centralize)
 # --------------------------
@@ -104,7 +104,6 @@ def eval_group_or_var(ds: xr.Dataset, name: str, groups: Optional[Dict[str, Any]
         except NameError as e:
             raise KeyError(f"Group expression for '{name}' references unknown name: {e}") from e
 
-
     raise TypeError("Group definitions must be list/tuple (sum) or str (expression).")
 
 
@@ -122,13 +121,31 @@ def discover_paths(base_dir: str, file_pattern: str) -> List[str]:
 # FVCOM time coercion helpers
 # --------------------------
 _UNIT_MAP = {
-    "days": "D", "day": "D",
-    "hours": "h", "hour": "h", "hr": "h", "hrs": "h",
-    "minutes": "m", "minute": "m", "min": "m",
-    "seconds": "s", "second": "s", "sec": "s", "secs": "s",
-    "milliseconds": "ms", "millisecond": "ms", "msec": "ms", "msecs": "ms", "ms": "ms",
-    "microseconds": "us", "microsecond": "us", "usec": "us", "usecs": "us", "μs": "us",
+    "days": "D",
+    "day": "D",
+    "hours": "h",
+    "hour": "h",
+    "hr": "h",
+    "hrs": "h",
+    "minutes": "m",
+    "minute": "m",
+    "min": "m",
+    "seconds": "s",
+    "second": "s",
+    "sec": "s",
+    "secs": "s",
+    "milliseconds": "ms",
+    "millisecond": "ms",
+    "msec": "ms",
+    "msecs": "ms",
+    "ms": "ms",
+    "microseconds": "us",
+    "microsecond": "us",
+    "usec": "us",
+    "usecs": "us",
+    "μs": "us",
 }
+
 
 def _parse_origin_from_units(units: str, default: str = "1858-11-17 00:00:00") -> pd.Timestamp:
     """
@@ -140,13 +157,15 @@ def _parse_origin_from_units(units: str, default: str = "1858-11-17 00:00:00") -
         return pd.Timestamp(default)
     m = re.search(
         r"since\s+(\d{1,4}-\d{1,2}-\d{1,2})(?:[ T](\d{1,2}:\d{2}:\d{2}))?",
-        units, flags=re.IGNORECASE,
+        units,
+        flags=re.IGNORECASE,
     )
     if not m:
         return pd.Timestamp(default)
     date_str = m.group(1)
     time_str = m.group(2) or "00:00:00"
     return pd.to_datetime(f"{date_str} {time_str}")
+
 
 def _decode_numeric_time(values: np.ndarray, units_attr: str) -> np.ndarray:
     """
@@ -167,6 +186,7 @@ def _decode_numeric_time(values: np.ndarray, units_attr: str) -> np.ndarray:
     dt = origin + td
     return dt.to_numpy(dtype="datetime64[ns]")
 
+
 def coerce_time(ds: xr.Dataset) -> xr.Dataset:
     """
     Build a proper datetime64 'time' coordinate from typical FVCOM patterns:
@@ -181,21 +201,29 @@ def coerce_time(ds: xr.Dataset) -> xr.Dataset:
     # Case A: Itime + Itime2
     # io.py (inside coerce_time, Case A)
     if "Itime" in ds and "Itime2" in ds:
-        it  = np.asarray(ds["Itime"].values)
+        it = np.asarray(ds["Itime"].values)
         it2 = np.asarray(ds["Itime2"].values)
         units = str(ds["Itime"].attrs.get("units", "")).lower()
         origin = _parse_origin_from_units(units, default="1858-11-17 00:00:00")
-    
+
         # Try common encodings for Itime2
         # 1) milliseconds
         try:
-            dt = pd.to_datetime(origin) + pd.to_timedelta(it, unit="D") + pd.to_timedelta(it2, unit="ms")
+            dt = (
+                pd.to_datetime(origin)
+                + pd.to_timedelta(it, unit="D")
+                + pd.to_timedelta(it2, unit="ms")
+            )
             return ds.assign_coords(time=("time", dt.to_numpy(dtype="datetime64[ns]")))
         except Exception:
             pass
         # 2) microseconds
         try:
-            dt = pd.to_datetime(origin) + pd.to_timedelta(it, unit="D") + pd.to_timedelta(it2, unit="us")
+            dt = (
+                pd.to_datetime(origin)
+                + pd.to_timedelta(it, unit="D")
+                + pd.to_timedelta(it2, unit="us")
+            )
             return ds.assign_coords(time=("time", dt.to_numpy(dtype="datetime64[ns]")))
         except Exception:
             pass
@@ -205,7 +233,6 @@ def coerce_time(ds: xr.Dataset) -> xr.Dataset:
             return ds.assign_coords(time=("time", dt.to_numpy(dtype="datetime64[ns]")))
         except Exception:
             pass
-
 
     # Case B: a numeric 'time' variable with units
     if "time" in ds and np.issubdtype(ds["time"].dtype, np.number):
@@ -222,6 +249,7 @@ def coerce_time(ds: xr.Dataset) -> xr.Dataset:
 # --------------------------
 # Dataset loader
 # --------------------------
+
 
 def _ensure_vertical_coords(ds: xr.Dataset) -> xr.Dataset:
     """
@@ -251,16 +279,19 @@ def _ensure_vertical_coords(ds: xr.Dataset) -> xr.Dataset:
                 ds = ds.set_coords(name)
     return ds
 
+
 def _ensure_index_coords(ds: xr.Dataset) -> xr.Dataset:
     for dim in ("node", "nele"):
         if dim in ds.dims and dim not in ds.coords:
             ds = ds.assign_coords({dim: (dim, np.arange(ds.sizes[dim]))})
     return ds
 
+
 def _preprocess_one(ds: xr.Dataset) -> xr.Dataset:
     ds = _ensure_vertical_coords(ds)
-    ds = _ensure_index_coords(ds) 
+    ds = _ensure_index_coords(ds)
     return ds
+
 
 def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
     paths = discover_paths(base_dir, file_pattern)
@@ -271,9 +302,9 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
             paths,
             combine="nested",
             concat_dim="time",
-            decode_times=False,      # we coerce below
-            engine=engine,           # 'scipy' (netCDF3), 'netcdf4' (C lib), 'h5netcdf' (HDF5)
-            chunks={"time": 168},    # dask-friendly weekly-ish chunks; OK for scipy too
+            decode_times=False,  # we coerce below
+            engine=engine,  # 'scipy' (netCDF3), 'netcdf4' (C lib), 'h5netcdf' (HDF5)
+            chunks={"time": 168},  # dask-friendly weekly-ish chunks; OK for scipy too
             parallel=True,
             preprocess=_preprocess_one,
             data_vars="minimal",
@@ -282,7 +313,6 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
             combine_attrs="override",
         )
 
-    last_err = None
     # Prefer 'scipy' for classic NetCDF; try others if needed
     for engine in ("scipy", "netcdf4", "h5netcdf"):
         try:
@@ -291,7 +321,6 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
             break
         except Exception as e:
             print(f"[io] Engine '{engine}' failed: {e}")
-            last_err = e
     else:
         # Final fallback: sequential open with scipy
         print("[io] Falling back to sequential open with engine='scipy' …")
@@ -322,9 +351,11 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
 
     return ds
 
+
 # --------------------------
 # Depth definer
 # --------------------------
+
 
 def ensure_z_from_sigma(
     ds: xr.Dataset,
@@ -356,19 +387,23 @@ def ensure_z_from_sigma(
         raise ValueError(f"Sigma coord '{sigma_name}' with dim 'siglay' is required.")
 
     eta_var = next((v for v in eta_candidates if v in ds), None)
-    h_var   = next((v for v in depth_candidates if v in ds), None)
+    h_var = next((v for v in depth_candidates if v in ds), None)
     if eta_var is None:
-        raise ValueError(f"None of eta candidates {eta_candidates} found (need free-surface at nodes).")
+        raise ValueError(
+            f"None of eta candidates {eta_candidates} found (need free-surface at nodes)."
+        )
     if h_var is None:
-        raise ValueError(f"None of depth candidates {depth_candidates} found (need bathymetry at nodes).")
+        raise ValueError(
+            f"None of depth candidates {depth_candidates} found (need bathymetry at nodes)."
+        )
 
-    sig  = ds[sigma_name]     # ('siglay',)
-    zeta = ds[eta_var]        # ('time','node') or broadcastable to that
-    h    = ds[h_var]          # ('node',)
+    sig = ds[sigma_name]  # ('siglay',)
+    zeta = ds[eta_var]  # ('time','node') or broadcastable to that
+    h = ds[h_var]  # ('node',)
 
     # Node-based z: xarray broadcasts across time/siglay/node (lazy if dask)
     z_node = zeta + (zeta + h) * sig
-    z_node = z_node.transpose(*[d for d in ("time","siglay","node") if d in z_node.dims])
+    z_node = z_node.transpose(*[d for d in ("time", "siglay", "node") if d in z_node.dims])
     ds[out_node] = z_node
     if verbose:
         print(f"[io] Added node vertical coord '{out_node}' with dims {tuple(z_node.dims)}")
@@ -380,19 +415,20 @@ def ensure_z_from_sigma(
         tri = tri.astype(int)
         # skip if any node index is out of range for this ds
         if tri.min() < 0 or tri.max() >= ds.sizes.get("node", 0):
-          if verbose:
-            print("[io] Skipping element z: 'nv' references node indices outside current dataset.")
+            if verbose:
+                print(
+                    "[io] Skipping element z: 'nv' references node indices outside current dataset."
+                )
         else:
-            tri_da = xr.DataArray(tri.astype(int), dims=("nele","three"))
+            tri_da = xr.DataArray(tri.astype(int), dims=("nele", "three"))
             zeta_e = zeta.isel(node=tri_da).mean("three")
-            h_e    = h.isel(node=tri_da).mean("three")
+            h_e = h.isel(node=tri_da).mean("three")
             z_elem = zeta_e + (zeta_e + h_e) * sig
-            z_elem = z_elem.transpose(*[d for d in ("time","siglay","nele") if d in z_elem.dims])
+            z_elem = z_elem.transpose(*[d for d in ("time", "siglay", "nele") if d in z_elem.dims])
             ds[out_elem] = z_elem
             if verbose:
-                print(f"[io] Added element vertical coord '{out_elem}' with dims {tuple(z_elem.dims)}")
- 
+                print(
+                    f"[io] Added element vertical coord '{out_elem}' with dims {tuple(z_elem.dims)}"
+                )
 
     return ds
-
-

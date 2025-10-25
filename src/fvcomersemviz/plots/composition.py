@@ -10,17 +10,22 @@ import pandas as pd
 from ..io import filter_time, eval_group_or_var
 from ..regions import apply_scope, build_region_masks, apply_prebuilt_mask
 from ..utils import (
-    out_dir, file_prefix,
-    select_depth, build_time_window_label,
-    resolve_available_vars, sum_over_all_dims,
-    select_da_by_z,                   
-    depth_tag,                
+    out_dir,
+    file_prefix,
+    select_depth,
+    build_time_window_label,
+    resolve_available_vars,
+    sum_over_all_dims,
+    select_da_by_z,
+    depth_tag,
 )
 
 from ..plot import stacked_fraction_bars
 
 
-def _fractional_breakdown(ds_depth: xr.Dataset, var_names: Sequence[str]) -> Tuple[np.ndarray, List[str]]:
+def _fractional_breakdown(
+    ds_depth: xr.Dataset, var_names: Sequence[str]
+) -> Tuple[np.ndarray, List[str]]:
     """Compute pooled sum for each var, then normalize to fractions."""
     labels: List[str] = list(var_names)
     totals = []
@@ -58,6 +63,7 @@ def _depth_average_dataset(ds_scoped: xr.Dataset, *, verbose: bool = False) -> x
 # =============================================================================
 # Public API (single-axes figures)
 # =============================================================================
+
 
 def composition_surface_bottom(
     ds: xr.Dataset,
@@ -141,23 +147,25 @@ def composition_surface_bottom(
 
     # variables present
     phyto_vars = resolve_available_vars(ds_scoped, phyto_vars)
-    zoo_vars   = resolve_available_vars(ds_scoped,   zoo_vars)
+    zoo_vars = resolve_available_vars(ds_scoped, zoo_vars)
 
     # depth slices
     ds_surf = select_depth(ds_scoped, "surface", verbose=verbose)
-    ds_bott = select_depth(ds_scoped, "bottom",  verbose=verbose)
+    ds_bott = select_depth(ds_scoped, "bottom", verbose=verbose)
 
     # pooled fractions
     phyto_s, phyto_labels = _fractional_breakdown(ds_surf, phyto_vars)
-    phyto_b, _            = _fractional_breakdown(ds_bott, phyto_vars)
-    zoo_s,   zoo_labels   = _fractional_breakdown(ds_surf, zoo_vars)
-    zoo_b,   _            = _fractional_breakdown(ds_bott, zoo_vars)
+    phyto_b, _ = _fractional_breakdown(ds_bott, phyto_vars)
+    zoo_s, zoo_labels = _fractional_breakdown(ds_surf, zoo_vars)
+    zoo_b, _ = _fractional_breakdown(ds_bott, zoo_vars)
 
     # figure - single axes with four bars
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
 
-    who = "Domain" if region is None and station is None else (
-        (region[0] if region is not None else f"Station {station[0]}")
+    who = (
+        "Domain"
+        if region is None and station is None
+        else (region[0] if region is not None else f"Station {station[0]}")
     )
     when = build_time_window_label(months, years, start_date, end_date)
     fig.suptitle(f"Phyto / Zoo Composition - {who} - {when}", fontsize=12)
@@ -271,26 +279,30 @@ def composition_depth_average_single(
 
     # variables present
     phyto_vars = resolve_available_vars(ds_scoped, phyto_vars)
-    zoo_vars   = resolve_available_vars(ds_scoped,   zoo_vars)
+    zoo_vars = resolve_available_vars(ds_scoped, zoo_vars)
 
     # depth-average (weighted if supported; else manual mean over siglay)
     def _depth_average_dataset(ds_scoped: xr.Dataset) -> xr.Dataset:
         try:
             return select_depth(ds_scoped, "depth_avg", verbose=verbose)
         except Exception:
-            return ds_scoped.mean("siglay", skipna=True) if "siglay" in ds_scoped.dims else ds_scoped
+            return (
+                ds_scoped.mean("siglay", skipna=True) if "siglay" in ds_scoped.dims else ds_scoped
+            )
 
     ds_avg = _depth_average_dataset(ds_scoped)
 
     # pooled fractions
     phyto_f, phyto_labels = _fractional_breakdown(ds_avg, phyto_vars)
-    zoo_f,   zoo_labels   = _fractional_breakdown(ds_avg, zoo_vars)
+    zoo_f, zoo_labels = _fractional_breakdown(ds_avg, zoo_vars)
 
     # figure - single axes with two bars
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
 
-    who = "Domain" if region is None and station is None else (
-        (region[0] if region is not None else f"Station {station[0]}")
+    who = (
+        "Domain"
+        if region is None and station is None
+        else (region[0] if region is not None else f"Station {station[0]}")
     )
     when = build_time_window_label(months, years, start_date, end_date)
     fig.suptitle(f"Depth-averaged Composition - {who} - {when}", fontsize=12)
@@ -307,8 +319,8 @@ def composition_depth_average_single(
         y_label="Fraction of group",
         show_legend=True,
         xtick_rotation=0.0,
-        bar_width=0.30,          # thinner bars
-        legend_outside=True,     # legend docked to the right
+        bar_width=0.30,  # thinner bars
+        legend_outside=True,  # legend docked to the right
     )
 
     # save
@@ -324,11 +336,12 @@ def composition_depth_average_single(
     if verbose:
         print(f"[composition] saved {path}")
 
+
 def composition_at_depth_single(
     ds: xr.Dataset,
     *,
-    z_level: float,                    # target depth (m; negative down)
-    tol: float = 0.75,                 # +/- m tolerance for nearest layer
+    z_level: float,  # target depth (m; negative down)
+    tol: float = 0.75,  # +/- m tolerance for nearest layer
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -415,7 +428,7 @@ def composition_at_depth_single(
 
     # variables present
     phyto_vars = resolve_available_vars(ds_scoped, phyto_vars)
-    zoo_vars   = resolve_available_vars(ds_scoped,   zoo_vars)
+    zoo_vars = resolve_available_vars(ds_scoped, zoo_vars)
 
     # slice at absolute depth (dict API)
     try:
@@ -428,13 +441,15 @@ def composition_at_depth_single(
 
     # pooled fractions
     phyto_f, phyto_labels = _fractional_breakdown(ds_z, phyto_vars)
-    zoo_f,   zoo_labels   = _fractional_breakdown(ds_z, zoo_vars)
+    zoo_f, zoo_labels = _fractional_breakdown(ds_z, zoo_vars)
 
     # figure - single axes with two bars
     fig, ax = plt.subplots(1, 1, figsize=figsize, constrained_layout=True)
 
-    who = "Domain" if region is None and station is None else (
-        (region[0] if region is not None else f"Station {station[0]}")
+    who = (
+        "Domain"
+        if region is None and station is None
+        else (region[0] if region is not None else f"Station {station[0]}")
     )
     when = build_time_window_label(months, years, start_date, end_date)
     fig.suptitle(f"Composition at z={z_level:.2f} m - {who} - {when}", fontsize=12)
@@ -451,8 +466,8 @@ def composition_at_depth_single(
         y_label="Fraction of group",
         show_legend=True,
         xtick_rotation=0.0,
-        bar_width=0.30,          # thinner bars
-        legend_outside=True,     # legend docked to the right
+        bar_width=0.30,  # thinner bars
+        legend_outside=True,  # legend docked to the right
     )
 
     # save
@@ -468,15 +483,16 @@ def composition_at_depth_single(
     if verbose:
         print(f"[composition] saved {path}")
 
+
 def composition_fraction_timeseries(
     ds: xr.Dataset,
     *,
     phyto_vars: Sequence[str],
     zoo_vars: Sequence[str],
     # scope
-    scope: str = "domain",                                # 'domain' | 'region' | 'station'
-    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,   # [(name, spec), ...]
-    stations: Optional[Sequence[Tuple[str, float, float]]] = None,    # [(name, lat, lon), ...]
+    scope: str = "domain",  # 'domain' | 'region' | 'station'
+    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,  # [(name, spec), ...]
+    stations: Optional[Sequence[Tuple[str, float, float]]] = None,  # [(name, lat, lon), ...]
     # time/depth filters
     depth: Any = "surface",
     months: Optional[Sequence[int]] = None,
@@ -487,11 +503,11 @@ def composition_fraction_timeseries(
     base_dir: str = "",
     figures_root: str = "",
     # style
-    show_std_band: bool = True,                            # ±1σ shading across space
-    colors: Optional[Dict[str, Any]] = None,               # optional per-variable color map
+    show_std_band: bool = True,  # ±1σ shading across space
+    colors: Optional[Dict[str, Any]] = None,  # optional per-variable color map
     linewidth: float = 2.0,
     alpha_band: float = 0.20,
-    figsize_per_panel: Tuple[float, float] = (10, 3.2),    # width, height per panel
+    figsize_per_panel: Tuple[float, float] = (10, 3.2),  # width, height per panel
     dpi: int = 150,
     verbose: bool = False,
 ) -> Tuple[Optional[str], Optional[str]]:
@@ -646,22 +662,22 @@ def composition_fraction_timeseries(
         except Exception as e:
             _log(f"[composition/abs-z] skipping abs-z refinement: {e}")
         return da
-    
-    
+
     def _safe_fraction(num: xr.DataArray, den: xr.DataArray) -> xr.DataArray:
         """
         Compute num/den WITHOUT triggering dask divide warnings.
         We first mask both arrays where denominator is invalid, then divide.
         """
         valid = np.isfinite(den) & (den > 0)
-        den_clean = den.where(valid)          # NaN where invalid → won't be used in division
-        num_clean = num.where(valid)          # keep numerator only where denom valid
-        return num_clean / den_clean          # division only happens on valid cells
+        den_clean = den.where(valid)  # NaN where invalid → won't be used in division
+        num_clean = num.where(valid)  # keep numerator only where denom valid
+        return num_clean / den_clean  # division only happens on valid cells
 
-
-    def _mask_da(da: xr.DataArray,
-                 mask_nodes: Optional[np.ndarray],
-                 mask_elems: Optional[np.ndarray]) -> xr.DataArray:
+    def _mask_da(
+        da: xr.DataArray,
+        mask_nodes: Optional[np.ndarray],
+        mask_elems: Optional[np.ndarray],
+    ) -> xr.DataArray:
         """Apply prebuilt region mask to a DA, honoring its space center."""
         if mask_nodes is None and mask_elems is None:
             return da
@@ -688,7 +704,9 @@ def composition_fraction_timeseries(
         names_in: List[str] = []
         for v in var_names:
             try:
-                da = ds_scoped[v] if v in ds_scoped else eval_group_or_var(ds_scoped, v, groups=None)
+                da = (
+                    ds_scoped[v] if v in ds_scoped else eval_group_or_var(ds_scoped, v, groups=None)
+                )
             except Exception as e:
                 _log(f"[composition] '{v}' not resolvable here: {e}")
                 continue
@@ -740,15 +758,18 @@ def composition_fraction_timeseries(
             sdims = _space_dims(frac)
             if sdims:
                 mean = frac.mean(dim=sdims, skipna=True)
-                std  = frac.std(dim=sdims,  skipna=True) if show_std_band else None
+                std = frac.std(dim=sdims, skipna=True) if show_std_band else None
             else:
                 # single point (e.g., station)
                 mean = frac
-                std  = xr.zeros_like(frac) if show_std_band else None
+                std = xr.zeros_like(frac) if show_std_band else None
 
             t = pd.to_datetime(np.atleast_1d(mean["time"].values))
-            out[v] = (t, np.asarray(mean.values, dtype=float),
-                      (None if std is None else np.asarray(std.values, dtype=float)))
+            out[v] = (
+                t,
+                np.asarray(mean.values, dtype=float),
+                (None if std is None else np.asarray(std.values, dtype=float)),
+            )
 
         return out or None
 
@@ -763,9 +784,16 @@ def composition_fraction_timeseries(
         fig_tag_bits: str,
     ) -> Optional[str]:
         # build data for all panels
-        payload: List[Tuple[str, Dict[str, Tuple[pd.DatetimeIndex, np.ndarray, Optional[np.ndarray]]]]] = []
+        payload: List[
+            Tuple[
+                str,
+                Dict[str, Tuple[pd.DatetimeIndex, np.ndarray, Optional[np.ndarray]]],
+            ]
+        ] = []
         for name, ds_scoped, m_nodes, m_elems in panels:
-            res = _fraction_timeseries_for_group(ds_scoped, group_vars, mask_nodes=m_nodes, mask_elems=m_elems)
+            res = _fraction_timeseries_for_group(
+                ds_scoped, group_vars, mask_nodes=m_nodes, mask_elems=m_elems
+            )
             if res is None:
                 _log(f"[composition/{group_label}] nothing to plot for panel '{name}'.")
                 continue
@@ -778,22 +806,31 @@ def composition_fraction_timeseries(
         n_pan = len(payload)
         fig_h = max(2.6, n_pan * figsize_per_panel[1])
         fig_w = figsize_per_panel[0]
-        fig, axes = plt.subplots(n_pan, 1, figsize=(fig_w, fig_h), sharex=True, constrained_layout=True)
+        fig, axes = plt.subplots(
+            n_pan, 1, figsize=(fig_w, fig_h), sharex=True, constrained_layout=True
+        )
         if n_pan == 1:
             axes = [axes]  # type: ignore[assignment]
 
         # color palette per variable (stable across panels)
         cycle = plt.rcParams.get("axes.prop_cycle", None)
-        default_colors = (cycle.by_key().get("color", [f"C{i}" for i in range(10)] )
-                          if cycle is not None else [f"C{i}" for i in range(10)])
+        default_colors = (
+            cycle.by_key().get("color", [f"C{i}" for i in range(10)])
+            if cycle is not None
+            else [f"C{i}" for i in range(10)]
+        )
         palette: Dict[str, Any] = {}
         for i, v in enumerate(group_vars):
-            palette[v] = (colors.get(v) if colors and v in colors else default_colors[i % len(default_colors)])
+            palette[v] = (
+                colors.get(v) if colors and v in colors else default_colors[i % len(default_colors)]
+            )
 
         # plot each panel
         for ax, (panel_name, res) in zip(axes, payload):
             # union of time for x-limits (guard empty)
-            t_candidates: List[pd.DatetimeIndex] = [t for (_v, (t, _m, _s)) in res.items() if len(t) > 0]
+            t_candidates: List[pd.DatetimeIndex] = [
+                t for (_v, (t, _m, _s)) in res.items() if len(t) > 0
+            ]
             if t_candidates:
                 t0 = min(ti[0] for ti in t_candidates)
                 t1 = max(ti[-1] for ti in t_candidates)
@@ -808,8 +845,17 @@ def composition_fraction_timeseries(
                 if show_std_band and std is not None:
                     lo = np.maximum(0.0, mean - std)
                     hi = np.minimum(1.0, mean + std)
-                    ax.fill_between(t, lo, hi, color=palette[v], alpha=alpha_band, linewidth=0, zorder=2)
-                handles.append(line); labels.append(v)
+                    ax.fill_between(
+                        t,
+                        lo,
+                        hi,
+                        color=palette[v],
+                        alpha=alpha_band,
+                        linewidth=0,
+                        zorder=2,
+                    )
+                handles.append(line)
+                labels.append(v)
 
             ax.set_ylim(0.0, 1.0)
             ax.set_ylabel("Fraction (0–1)")
@@ -835,7 +881,9 @@ def composition_fraction_timeseries(
 
     # -------- select depth + time window once --------
     ds_depth = select_depth(ds, depth, verbose=verbose)
-    ds_t = filter_time(ds_depth, months=months, years=years, start_date=start_date, end_date=end_date)
+    ds_t = filter_time(
+        ds_depth, months=months, years=years, start_date=start_date, end_date=end_date
+    )
 
     # -------- panels by scope --------
     scope_norm = scope.strip().lower()
@@ -843,7 +891,7 @@ def composition_fraction_timeseries(
         raise ValueError("scope must be 'domain', 'region', or 'station'")
 
     panels_phyto: List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
-    panels_zoo:   List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
+    panels_zoo: List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
 
     if scope_norm == "domain":
         scoped = apply_scope(ds_t, region=None, station=None, verbose=verbose)
@@ -855,7 +903,7 @@ def composition_fraction_timeseries(
         if not regions:
             raise ValueError("scope='region' requires a non-empty `regions=[(name, spec), ...]`")
 
-        for (name, spec) in regions:
+        for name, spec in regions:
             # Build masks ON THE SAME windowed dataset
             try:
                 mask_nodes, mask_elems = build_region_masks(ds_t, (name, spec), verbose=verbose)
@@ -878,8 +926,10 @@ def composition_fraction_timeseries(
 
     else:  # station
         if not stations:
-            raise ValueError("scope='station' requires a non-empty `stations=[(name, lat, lon), ...]`")
-        for (name, lat, lon) in stations:
+            raise ValueError(
+                "scope='station' requires a non-empty `stations=[(name, lat, lon), ...]`"
+            )
+        for name, lat, lon in stations:
             scoped = apply_scope(ds_t, region=None, station=(name, lat, lon), verbose=verbose)
             panels_phyto.append((name, scoped, None, None))
             panels_zoo.append((name, scoped, None, None))
@@ -887,9 +937,9 @@ def composition_fraction_timeseries(
 
     # ensure we only try to draw variables that exist somewhere (keep full lists; per-panel filters happen inside)
     phyto_vars = list(phyto_vars)
-    zoo_vars   = list(zoo_vars)
+    zoo_vars = list(zoo_vars)
 
     # -------- render both figures --------
     phyto_path = _draw_figure("Phyto", panels_phyto, phyto_vars, fig_tag_bits=fig_tag)
-    zoo_path   = _draw_figure("Zoo",   panels_zoo,   zoo_vars,   fig_tag_bits=fig_tag)
+    zoo_path = _draw_figure("Zoo", panels_zoo, zoo_vars, fig_tag_bits=fig_tag)
     return phyto_path, zoo_path

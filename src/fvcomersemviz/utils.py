@@ -1,8 +1,9 @@
-from __future__ import annotations
+
 """
 Utilities.
 """
 
+from __future__ import annotations
 from pathlib import Path
 import inspect
 from typing import Iterable, Tuple, Optional, Dict, Any, Literal, List, Sequence
@@ -10,14 +11,10 @@ import os
 import numpy as np
 import matplotlib.tri as mtri
 import xarray as xr
-import pandas as pd
-import xarray as xr
 from pyproj import Geod
 
 
-
-
-from .io import eval_group_or_var  
+from .io import eval_group_or_var
 # utils.py
 
 
@@ -44,6 +41,7 @@ def is_absolute_z(depth: Any) -> bool:
 
     return False
 
+
 def resolve_da_with_depth(
     ds: xr.Dataset,
     var: str,
@@ -54,7 +52,7 @@ def resolve_da_with_depth(
 ) -> xr.DataArray:
     ds_scoped = ds
     try:
-        ds_scoped = select_depth(ds, depth, verbose=verbose)  
+        ds_scoped = select_depth(ds, depth, verbose=verbose)
     except Exception:
         pass
 
@@ -75,7 +73,6 @@ def resolve_da_with_depth(
     da = da.expand_dims(siglay=sig)
     da["siglay"] = sig
     return da
-
 
 
 def _lon_lat_arrays_nodes_only(ds: xr.Dataset) -> tuple[np.ndarray, np.ndarray]:
@@ -171,7 +168,9 @@ def build_triangulation(ds: xr.Dataset) -> mtri.Triangulation:
         x, y = _lon_lat_arrays_nodes_only(ds)
         nv = np.asarray(ds["nv"].values)
         if nv.ndim != 2 or 3 not in nv.shape:
-            raise ValueError("nv must be 2D with 3 entries per triangle (shape (3, nele) or (nele, 3)).")
+            raise ValueError(
+                "nv must be 2D with 3 entries per triangle (shape (3, nele) or (nele, 3))."
+            )
         triangles = (nv.T if nv.shape[0] == 3 else nv) - 1
         triangles = triangles.astype(int)
         return mtri.Triangulation(x, y, triangles=triangles)
@@ -179,6 +178,7 @@ def build_triangulation(ds: xr.Dataset) -> mtri.Triangulation:
     # --- Delaunay fallback: allow either node or element centers
     x, y = _lon_lat_arrays_any(ds)
     return mtri.Triangulation(x, y)
+
 
 def robust_clims(a: Iterable[float], q: Tuple[float, float] = (5, 95)) -> tuple[float, float]:
     """
@@ -201,6 +201,7 @@ def robust_clims(a: Iterable[float], q: Tuple[float, float] = (5, 95)) -> tuple[
 def file_prefix(base_dir: str) -> str:
     return os.path.basename(os.path.normpath(base_dir))
 
+
 def _caller_plot_module_stem(default: str | None = None) -> str | None:
     """
     Walk the call stack and return the module filename stem if the caller is inside
@@ -215,6 +216,7 @@ def _caller_plot_module_stem(default: str | None = None) -> str | None:
         if name.startswith("fvcomersemviz.plots.") and file:
             return Path(file).stem
     return default
+
 
 def out_dir(base_dir: str, figures_root: str) -> str:
     """
@@ -304,7 +306,8 @@ def weighted_mean_std(
     var = ((da_aligned - mean) ** 2 * w).sum(dims, skipna=True) / wsum
     std = np.sqrt(var)
     return mean, std
-    
+
+
 def element_mask_from_node_mask(ds: xr.Dataset, node_mask: np.ndarray) -> Optional[np.ndarray]:
     """
     Convert node mask -> element mask using ds['nv'] (keep element if all 3 nodes inside).
@@ -330,6 +333,7 @@ def style_get(var: str, styles: Optional[Dict[str, Dict[str, Any]]], key: str, d
     if not s:
         return default
     return s.get(key, default)
+
 
 # ---- depth selection (sigma-based, plus deferral for absolute-z) ----
 def select_depth(
@@ -406,9 +410,15 @@ def select_depth(
         if "sigma_index" in mode:
             return ds.isel(siglay=int(mode["sigma_index"]))
         if "sigma_value" in mode:
-            return select_depth(ds, float(mode["sigma_value"]), thickness_var=thickness_var, verbose=verbose)
+            return select_depth(
+                ds,
+                float(mode["sigma_value"]),
+                thickness_var=thickness_var,
+                verbose=verbose,
+            )
 
     raise ValueError(f"Unsupported depth selector: {mode!r}")
+
 
 # slice a DataArray at an absolute (z, metres) depth
 def select_da_by_z(
@@ -433,6 +443,7 @@ def select_da_by_z(
     """
     # Lazily ensure vertical coords on the full dataset (not spatially subset)
     from fvcomersemviz.io import ensure_z_from_sigma
+
     ds_z = ensure_z_from_sigma(ds_full, verbose=verbose)
 
     # Align a z-like array to da’s dims/coords
@@ -465,14 +476,18 @@ def select_da_by_z(
     # --- Node-centred ---
     if "siglay" in da.dims and "node" in da.dims and "z" in ds_z:
         z = _align(ds_z["z"])  # dims like ('time','siglay','node') or subset
-        idx = (np.abs(z - z_target)).argmin("siglay").astype("int64")  # dims: ('time','node') or ('node',)
+        idx = (
+            (np.abs(z - z_target)).argmin("siglay").astype("int64")
+        )  # dims: ('time','node') or ('node',)
         idx_da = _to_da_indexer(idx, z)
         return da.isel(siglay=idx_da)
 
     # --- Element-centred ---
     if "siglay" in da.dims and "nele" in da.dims and "z_nele" in ds_z:
         zc = _align(ds_z["z_nele"])  # dims like ('time','siglay','nele') or subset
-        idx = (np.abs(zc - z_target)).argmin("siglay").astype("int64")  # dims: ('time','nele') or ('nele',)
+        idx = (
+            (np.abs(zc - z_target)).argmin("siglay").astype("int64")
+        )  # dims: ('time','nele') or ('nele',)
         idx_da = _to_da_indexer(idx, zc)
         return da.isel(siglay=idx_da)
 
@@ -481,31 +496,29 @@ def select_da_by_z(
         # Use first available vertical coordinate (node=0 or nele=0), align to da's time,
         # then vectorized integer indexing over time.
         if "z" in ds_z:
-            zref = ds_z["z"].isel(node=0)          # dims: ('time','siglay') or ('siglay',)
+            zref = ds_z["z"].isel(node=0)  # dims: ('time','siglay') or ('siglay',)
         elif "z_nele" in ds_z:
-            zref = ds_z["z_nele"].isel(nele=0)     # dims: ('time','siglay') or ('siglay',)
+            zref = ds_z["z_nele"].isel(nele=0)  # dims: ('time','siglay') or ('siglay',)
         else:
             raise ValueError("No 'z' or 'z_nele' vertical coordinates available.")
-    
+
         # Align time (if present)
         if "time" in da.dims and "time" in zref.dims:
             zref = zref.sel(time=da["time"])
-    
+
         # Nearest sigma layer per timestep (vectorized over time)
         idx = (np.abs(zref - z_target)).argmin("siglay").astype("int64")  # dims: () or ('time',)
-    
+
         if idx.ndim == 0:
             # truly scalar index
             return da.isel(siglay=int(idx.values))
-    
+
         # vectorized integer indexer: dims must match da except for 'siglay'
         idx_da = xr.DataArray(idx.values, dims=tuple(idx.dims))
         return da.isel(siglay=idx_da)
 
-
     # Nothing to do
     return da
-
 
 
 # ---- nearest station index (nodes or elements) ----
@@ -516,7 +529,6 @@ def nearest_index_for_dim(
     dim: "Literal['node','nele']",
 ) -> int:
     """Return nearest grid index to (lat, lon) for nodes ('lon'/'lat') or elements ('lonc'/'latc')."""
-    from pyproj import Geod
     if dim == "node":
         if "lon" not in ds or "lat" not in ds:
             raise ValueError("Need 'lon'/'lat' for node lookup.")
@@ -543,14 +555,27 @@ def build_time_window_label(
     end_date: Optional[str],
 ) -> str:
     """e.g., 'Jan-Mar__2020-2021' or '2022-01-01 to 2022-02-01' or 'AllTime'."""
-    names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    names = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
     parts: list[str] = []
     if months:
         m = sorted({int(x) for x in months})
         if len(m) > 1 and m == list(range(m[0], m[-1] + 1)):
-            parts.append(f"{names[m[0]-1]}-{names[m[-1]-1]}")
+            parts.append(f"{names[m[0] - 1]}-{names[m[-1] - 1]}")
         else:
-            parts.append("-".join(names[i-1] for i in m))
+            parts.append("-".join(names[i - 1] for i in m))
     if years:
         y = sorted({int(x) for x in years})
         parts.append(f"{y[0]}-{y[-1]}" if len(y) > 1 else f"{y[0]}")
@@ -573,13 +598,18 @@ def depth_tag(depth: Any) -> str:
     if isinstance(depth, (int, np.integer)):
         return f"k{int(depth)}"
     if isinstance(depth, (float, np.floating)):
-        return f"sigma-{float(depth):g}" if -1.0 <= float(depth) <= 0.0 else f"zm-{abs(float(depth)):g}"
+        return (
+            f"sigma-{float(depth):g}"
+            if -1.0 <= float(depth) <= 0.0
+            else f"zm-{abs(float(depth)):g}"
+        )
     if isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
         return f"zm-{abs(float(depth[1])):g}"
     if isinstance(depth, dict) and "z_m" in depth:
         return f"zm-{abs(float(depth['z_m'])):g}"
     return str(depth)
-    
+
+
 def align_flatten_pair(
     x_da: xr.DataArray,
     y_da: xr.DataArray,
@@ -592,11 +622,13 @@ def align_flatten_pair(
     x = np.asarray(x_al.values).ravel()
     y = np.asarray(y_al.values).ravel()
     m = np.isfinite(x) & np.isfinite(y)
-    x = x[m]; y = y[m]
+    x = x[m]
+    y = y[m]
     if sample_max is not None and x.size > sample_max:
         rng = rng or np.random.default_rng()
         sel = rng.choice(x.size, size=sample_max, replace=False)
-        x = x[sel]; y = y[sel]
+        x = x[sel]
+        y = y[sel]
     return x, y
 
 
@@ -638,4 +670,3 @@ def sum_over_all_dims(da: xr.DataArray) -> float:
     # At this point s should be a scalar DataArray (NumPy-backed).
     # Convert robustly to a Python float.
     return float(np.asarray(s.data).reshape(()).item())
-

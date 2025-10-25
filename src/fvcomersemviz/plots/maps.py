@@ -16,7 +16,8 @@ from ..io import (
 )
 
 from ..utils import (
-    out_dir, file_prefix,
+    out_dir,
+    file_prefix,
     robust_clims,
     build_triangulation,
     style_get,
@@ -38,16 +39,21 @@ from ..regions import (
 # Internal helpers kept for this module
 # -----------------------------
 
-def _timepoints_to_list(at_time: Optional[Any], at_times: Optional[Sequence[Any]]) -> Optional[List[pd.Timestamp]]:
+
+def _timepoints_to_list(
+    at_time: Optional[Any], at_times: Optional[Sequence[Any]]
+) -> Optional[List[pd.Timestamp]]:
     if at_times is not None:
         return [pd.to_datetime(t) for t in at_times]
     if at_time is not None:
         return [pd.to_datetime(at_time)]
     return None
 
+
 def _iso_label(ts: pd.Timestamp) -> str:
     # Compact label for filenames
     return ts.strftime("%Y-%m-%dT%H%M")
+
 
 def _choose_instants(
     da: xr.DataArray,
@@ -66,11 +72,12 @@ def _choose_instants(
         out.append((pd.Timestamp(chosen), _one))
     return out
 
+
 def _plot_tripcolor_full(
     tri: Triangulation,
     *,
-    node_values: Optional[np.ndarray] = None,   # length Npoints (NaN outside)
-    face_values: Optional[np.ndarray] = None,   # length Ntriangles (NaN outside)
+    node_values: Optional[np.ndarray] = None,  # length Npoints (NaN outside)
+    face_values: Optional[np.ndarray] = None,  # length Ntriangles (NaN outside)
     cmap: str,
     clim: Optional[Tuple[float, float]],
     title: str,
@@ -104,7 +111,8 @@ def _plot_tripcolor_full(
         ax.triplot(tri, color="k", lw=0.3, alpha=0.4, zorder=3)
 
     ax.set_title(title)
-    ax.set_xlabel("Longitude"); ax.set_ylabel("Latitude")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
     cbar = fig.colorbar(tpc, ax=ax, shrink=0.9, pad=0.02)
     cbar.set_label(cbar_label)
 
@@ -118,6 +126,7 @@ def _plot_tripcolor_full(
 # ------------------------------------------------------------
 # Mapping Functions
 # ------------------------------------------------------------
+
 
 def domain_map(
     ds: xr.Dataset,
@@ -145,12 +154,12 @@ def domain_map(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
     """
-    Render domain-wide maps for one or more variables at a chosen depth and time window, 
+    Render domain-wide maps for one or more variables at a chosen depth and time window,
     saving either **instantaneous** snapshots or the **time mean**
     Handles 3-D (time×siglay×space) and 2-D (time×space) fields. 2-D fields are auto-lifted
     to a single 'siglay' so vertical logic (surface/bottom/depth_avg/abs-z) works uniformly.
     Absolute-z is applied per variable after time filtering.
-    
+
     Workflow
     --------
     1. Depth selection: `select_depth(ds, depth)` (supports sigma keywords, depth-avg,
@@ -237,7 +246,7 @@ def domain_map(
     - If `ds` lacks 'nv', triangulation falls back to Delaunay using available coordinates.
     - Color scaling priority: `norm` > (vmin/vmax in styles) > `clim` > robust percentiles.
     """
-    
+
     # Time filter first; per-var depth is handled by resolve_da_with_depth
     ds_t = filter_time(ds, months, years, start_date, end_date)
 
@@ -258,11 +267,11 @@ def domain_map(
             continue
 
         # Per-var style overrides (with fallback to function args)
-        cmap_eff   = style_get(var, styles, "cmap", cmap)
-        norm_eff   = style_get(var, styles, "norm", None)
+        cmap_eff = style_get(var, styles, "cmap", cmap)
+        norm_eff = style_get(var, styles, "norm", None)
         vmin_style = style_get(var, styles, "vmin", None)
         vmax_style = style_get(var, styles, "vmax", None)
-        shading_eff= style_get(var, styles, "shading", shading)
+        shading_eff = style_get(var, styles, "shading", shading)
 
         center = "node" if "node" in da.dims else ("nele" if "nele" in da.dims else None)
         if center is None:
@@ -284,29 +293,53 @@ def domain_map(
 
             if center == "node":
                 _plot_tripcolor_full(
-                    tri, node_values=vals, cmap=cmap_eff, clim=clim_eff, norm=norm_eff,
-                    title=title, cbar_label=var, fname=fname, dpi=dpi, figsize=figsize,
-                    shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
+                    tri,
+                    node_values=vals,
+                    cmap=cmap_eff,
+                    clim=clim_eff,
+                    norm=norm_eff,
+                    title=title,
+                    cbar_label=var,
+                    fname=fname,
+                    dpi=dpi,
+                    figsize=figsize,
+                    shading=shading_eff,
+                    verbose=verbose,
+                    draw_mesh=grid_on,
                 )
             else:
                 _plot_tripcolor_full(
-                    tri, face_values=vals, cmap=cmap_eff, clim=clim_eff, norm=norm_eff,
-                    title=title, cbar_label=var, fname=fname, dpi=dpi, figsize=figsize,
-                    shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
+                    tri,
+                    face_values=vals,
+                    cmap=cmap_eff,
+                    clim=clim_eff,
+                    norm=norm_eff,
+                    title=title,
+                    cbar_label=var,
+                    fname=fname,
+                    dpi=dpi,
+                    figsize=figsize,
+                    shading=shading_eff,
+                    verbose=verbose,
+                    draw_mesh=grid_on,
                 )
 
         if desired:
             for chosen, inst in _choose_instants(da, desired, method=time_method):
                 lbl = _iso_label(chosen) if pd.notnull(chosen) else "NoTime"
                 title = f"Domain - {var} ({tag}, {lbl})"
-                fname = os.path.join(outdir, f"{prefix}__Map-Domain__{var}__{tag}__{lbl}__Instant.png")
+                fname = os.path.join(
+                    outdir, f"{prefix}__Map-Domain__{var}__{tag}__{lbl}__Instant.png"
+                )
                 vals = np.asarray(inst.values).ravel()
                 _plot_values(vals, title, fname)
         else:
             m = da.mean("time", skipna=True) if "time" in da.dims else da
             vals = np.asarray(m.values).ravel()
             title = f"Domain - {var} ({tag}, {label_window})"
-            fname = os.path.join(outdir, f"{prefix}__Map-Domain__{var}__{tag}__{label_window}__Mean.png")
+            fname = os.path.join(
+                outdir, f"{prefix}__Map-Domain__{var}__{tag}__{label_window}__Mean.png"
+            )
             _plot_values(vals, title, fname)
 
 
@@ -340,7 +373,7 @@ def region_map(
     Region-masked maps for one or more variables at a chosen depth and time window.
     Handles 3-D and 2-D fields. 2-D fields are auto-lifted; vertical selection is
     applied **after** masking (for absolute-z correctness).
-    
+
     Render **region-masked** maps for one or more variables at a chosen depth and
     time window, saving instantaneous snapshots or the time mean for each region.
 
@@ -431,7 +464,7 @@ def region_map(
         'nv' is needed to derive it).
     - Color scaling is computed from **in-region** values only (after masking).
     - If a region mask is empty or a variable lacks required dims, that plot is skipped.
-    
+
     """
     if "lon" not in ds or "lat" not in ds:
         raise ValueError("Dataset must contain 'lon' and 'lat' for region masking.")
@@ -452,7 +485,8 @@ def region_map(
                 if verbose:
                     print(f"[maps/region {region_name}] shapefile: {spec['shapefile']}")
                 mask_nodes = polygon_mask_from_shapefile(
-                    ds, spec["shapefile"],
+                    ds,
+                    spec["shapefile"],
                     name_field=spec.get("name_field"),
                     name_equals=spec.get("name_equals"),
                 )
@@ -486,7 +520,9 @@ def region_map(
                 continue
             if "siglay" not in da.dims:
                 if verbose:
-                    print(f"[maps/region {region_name}] '{var}' has no 'siglay' — lifting to single layer.")
+                    print(
+                        f"[maps/region {region_name}] '{var}' has no 'siglay' — lifting to single layer."
+                    )
                 sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
                 da = da.expand_dims(siglay=sig)
                 da["siglay"] = sig
@@ -499,14 +535,16 @@ def region_map(
                 continue
             if center == "node":
                 idx_nodes = np.where(mask_nodes)[0]
-                da     = da.isel(node=idx_nodes)
+                da = da.isel(node=idx_nodes)
                 ds_sub = ds_sub.isel(node=idx_nodes)
             else:
                 if mask_elems is None:
-                    print(f"[maps/region {region_name}] element-centered map requires 'nv' (cannot mask elements).")
+                    print(
+                        f"[maps/region {region_name}] element-centered map requires 'nv' (cannot mask elements)."
+                    )
                     continue
                 idx_elems = np.where(mask_elems)[0]
-                da     = da.isel(nele=idx_elems)
+                da = da.isel(nele=idx_elems)
                 ds_sub = ds_sub.isel(nele=idx_elems)
 
             # 4) vertical selection on masked subset
@@ -521,19 +559,21 @@ def region_map(
                     target_z = float(depth["z_m"])
                 da = select_da_by_z(da, ds_sub, target_z, verbose=verbose)
             else:
-                ds_tmp   = da.to_dataset(name=da.name)
+                ds_tmp = da.to_dataset(name=da.name)
                 ds_depth = select_depth(ds_tmp, depth, verbose=verbose)
-                da       = ds_depth[da.name]
+                da = ds_depth[da.name]
 
             # Per-var style overrides
-            cmap_eff   = style_get(var, styles, "cmap", cmap)
-            norm_eff   = style_get(var, styles, "norm", None)
+            cmap_eff = style_get(var, styles, "cmap", cmap)
+            norm_eff = style_get(var, styles, "norm", None)
             vmin_style = style_get(var, styles, "vmin", None)
             vmax_style = style_get(var, styles, "vmax", None)
-            shading_eff= style_get(var, styles, "shading", shading)
+            shading_eff = style_get(var, styles, "shading", shading)
 
             # --- inside region_map, replace make_masked_full() ---
-            def make_masked_full(values_full: np.ndarray) -> Tuple[np.ndarray, Optional[Tuple[float, float]]]:
+            def make_masked_full(
+                values_full: np.ndarray,
+            ) -> Tuple[np.ndarray, Optional[Tuple[float, float]]]:
                 """
                 values_full is the region-subset array (len == len(idx_nodes) or len(idx_elems)).
                 Rebuild a full-domain array and compute clim from the in-region values.
@@ -550,9 +590,9 @@ def region_map(
                     full = np.full(n_elems, np.nan, dtype=float)
                     full[idx_elems] = values_full
                     v_in = values_full  # already only in-region
-            
+
                 v_in = v_in[np.isfinite(v_in)]
-            
+
                 if norm_eff is not None:
                     clim_eff = None
                 else:
@@ -562,49 +602,89 @@ def region_map(
                         clim_eff = clim
                     else:
                         clim_eff = (0.0, 1.0) if v_in.size == 0 else robust_clims(v_in, q=robust_q)
-            
+
                 return full, clim_eff
-            
 
             if desired:
                 for chosen, inst in _choose_instants(da, desired, method=time_method):
                     lbl = _iso_label(chosen) if pd.notnull(chosen) else "NoTime"
                     title = f"Region {region_name} - {var} ({tag}, {lbl})"
-                    fname = os.path.join(outdir, f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{lbl}__Instant.png")
+                    fname = os.path.join(
+                        outdir,
+                        f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{lbl}__Instant.png",
+                    )
                     vals = np.asarray(inst.values).ravel()
                     full, clim_eff = make_masked_full(vals)
                     if center == "node":
                         _plot_tripcolor_full(
-                            tri, node_values=full,
-                            cmap=cmap_eff, clim=clim_eff, norm=norm_eff,
-                            title=title, cbar_label=var, fname=fname, dpi=dpi,
-                            figsize=figsize, shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
+                            tri,
+                            node_values=full,
+                            cmap=cmap_eff,
+                            clim=clim_eff,
+                            norm=norm_eff,
+                            title=title,
+                            cbar_label=var,
+                            fname=fname,
+                            dpi=dpi,
+                            figsize=figsize,
+                            shading=shading_eff,
+                            verbose=verbose,
+                            draw_mesh=grid_on,
                         )
                     else:
                         _plot_tripcolor_full(
-                            tri, face_values=full,
-                            cmap=cmap_eff, clim=clim_eff, norm=norm_eff,
-                            title=title, cbar_label=var, fname=fname, dpi=dpi,
-                            figsize=figsize, shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
+                            tri,
+                            face_values=full,
+                            cmap=cmap_eff,
+                            clim=clim_eff,
+                            norm=norm_eff,
+                            title=title,
+                            cbar_label=var,
+                            fname=fname,
+                            dpi=dpi,
+                            figsize=figsize,
+                            shading=shading_eff,
+                            verbose=verbose,
+                            draw_mesh=grid_on,
                         )
             else:
                 m = da.mean("time", skipna=True) if "time" in da.dims else da
                 vals = np.asarray(m.values).ravel()
                 full, clim_eff = make_masked_full(vals)
                 title = f"Region {region_name} - {var} ({tag}, {label_window})"
-                fname = os.path.join(outdir, f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{label_window}__Mean.png")
+                fname = os.path.join(
+                    outdir,
+                    f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{label_window}__Mean.png",
+                )
                 if center == "node":
                     _plot_tripcolor_full(
-                        tri, node_values=full,
-                        cmap=cmap_eff, clim=clim_eff, norm=norm_eff,
-                        title=title, cbar_label=var, fname=fname, dpi=dpi,
-                        figsize=figsize, shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
+                        tri,
+                        node_values=full,
+                        cmap=cmap_eff,
+                        clim=clim_eff,
+                        norm=norm_eff,
+                        title=title,
+                        cbar_label=var,
+                        fname=fname,
+                        dpi=dpi,
+                        figsize=figsize,
+                        shading=shading_eff,
+                        verbose=verbose,
+                        draw_mesh=grid_on,
                     )
                 else:
                     _plot_tripcolor_full(
-                        tri, face_values=full,
-                        cmap=cmap_eff, clim=clim_eff, norm=norm_eff,
-                        title=title, cbar_label=var, fname=fname, dpi=dpi,
-                        figsize=figsize, shading=shading_eff, verbose=verbose, draw_mesh=grid_on,
+                        tri,
+                        face_values=full,
+                        cmap=cmap_eff,
+                        clim=clim_eff,
+                        norm=norm_eff,
+                        title=title,
+                        cbar_label=var,
+                        fname=fname,
+                        dpi=dpi,
+                        figsize=figsize,
+                        shading=shading_eff,
+                        verbose=verbose,
+                        draw_mesh=grid_on,
                     )
-

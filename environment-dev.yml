@@ -1,0 +1,31 @@
+name: fviz-dev
+channels:
+  - conda-forge
+dependencies:
+  # Python
+  - python=3.11
+
+  # Core scientific stack
+  - numpy
+  - scipy
+  - pandas
+  - xarray
+  - dask
+  - netcdf4
+
+  # Plotting
+  - matplotlib
+  - notebook
+
+  # Geospatial stack
+  - geopandas
+  - shapely
+  - pyproj
+  - rtree
+  - cartopy
+
+  # Install package in editable mode with dev extras (run from repo root)
+  - pip
+  - pip:
+      - -e .[dev]
+

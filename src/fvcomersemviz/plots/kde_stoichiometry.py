@@ -11,9 +11,11 @@ from scipy.ndimage import gaussian_filter
 from ..io import filter_time, eval_group_or_var
 from ..regions import build_region_masks, apply_prebuilt_mask
 from ..utils import (
-    out_dir, file_prefix,
-    robust_clims, style_get,
-    select_depth, build_time_window_label,
+    out_dir,
+    file_prefix,
+    style_get,
+    select_depth,
+    build_time_window_label,
     align_flatten_pair,
 )
 
@@ -21,22 +23,29 @@ from ..utils import (
 # Helpers
 # ---------------------------------------------------------------------
 
+
 def _vprint(verbose: bool, *args, **kwargs):
     if verbose:
         print(*args, **kwargs)
 
+
 def _space_dim(da: xr.DataArray) -> Optional[str]:
     """Return 'node' or 'nele' if present, else None."""
-    if "node" in da.dims: return "node"
-    if "nele" in da.dims: return "nele"
+    if "node" in da.dims:
+        return "node"
+    if "nele" in da.dims:
+        return "nele"
     return None
 
+
 def _kde2d(
-    x: np.ndarray, y: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
     *,
     grids: int = 100,
     bw_method: Optional[float | str] = "scott",
-    xpad: float = 0.05, ypad: float = 0.05,
+    xpad: float = 0.05,
+    ypad: float = 0.05,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return (X, Y, Z) for density on a regular grid using Gaussian KDE."""
     if x.size < 2 or y.size < 2:
@@ -59,9 +68,9 @@ def _kde2d(
     Z = kde(np.vstack([X.ravel(), Y.ravel()])).reshape(X.shape)
     return X, Y, Z
 
+
 def _kde2d_hist(
-    x: np.ndarray, y: np.ndarray,
-    *, grids: int = 100, sigma: float = 1.0
+    x: np.ndarray, y: np.ndarray, *, grids: int = 100, sigma: float = 1.0
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Approximate KDE by 2D histogram then Gaussian blur (σ in bins).
@@ -72,8 +81,10 @@ def _kde2d_hist(
     xrng = xmax - xmin or 1.0
     yrng = ymax - ymin or 1.0
     # pad 5%
-    xmin -= 0.05 * xrng; xmax += 0.05 * xrng
-    ymin -= 0.05 * yrng; ymax += 0.05 * yrng
+    xmin -= 0.05 * xrng
+    xmax += 0.05 * xrng
+    ymin -= 0.05 * yrng
+    ymax += 0.05 * yrng
 
     H, xe, ye = np.histogram2d(x, y, bins=grids, range=[[xmin, xmax], [ymin, ymax]])
     Z = gaussian_filter(H.T, sigma=sigma, mode="nearest")
@@ -83,9 +94,11 @@ def _kde2d_hist(
     X, Y = np.meshgrid(Xc, Yc, indexing="xy")
     return X, Y, Z
 
+
 def _panel_title(group: str, side: str, ratio: str, var: str) -> str:
     # side: 'surface' or 'bottom'; ratio: 'NC' or 'PC'
     return f"{group} {ratio}:C vs {var} — {side}"
+
 
 # ---------------------------------------------------------------------
 # Main entry point
@@ -93,8 +106,8 @@ def _panel_title(group: str, side: str, ratio: str, var: str) -> str:
 def kde_stoichiometry_2x2(
     ds: xr.Dataset,
     *,
-    group: str,                    # e.g., "P5"
-    variable: str,                 # native var or group name; resolved via groups
+    group: str,  # e.g., "P5"
+    variable: str,  # native var or group name; resolved via groups
     region: Optional[Tuple[str, Dict[str, Any]]] = None,  # (name, spec) or None for full domain
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
@@ -106,10 +119,10 @@ def kde_stoichiometry_2x2(
     dpi: int = 150,
     figsize: Tuple[float, float] = (11, 9),
     cmap: str = "viridis",
-    grids: int = 100,               # smaller default → faster
+    grids: int = 100,  # smaller default → faster
     bw_method: Optional[float | str] = "scott",  # ignored if method="hist"
-    min_samples: int = 200,         # minimum finite pairs to attempt a panel
-    scatter_underlay: int = 0,      # 0 = no scatter; else plot up to N random points under the density
+    min_samples: int = 200,  # minimum finite pairs to attempt a panel
+    scatter_underlay: int = 0,  # 0 = no scatter; else plot up to N random points under the density
     verbose: bool = False,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     # --- new fast-path controls ---
@@ -123,18 +136,18 @@ def kde_stoichiometry_2x2(
     optionally scoped by region and time filters. Each panel pools all available
     (time × space) samples after depth selection (surface/bottom) and masking, then
     plots a 2D density estimate.
-    
+
     Figure layout
     -------------
     [ (0,0) ] Surface:  N:C  vs `variable`
     [ (0,1) ] Surface:  P:C  vs `variable`
     [ (1,0) ] Bottom :  N:C  vs `variable`
     [ (1,1) ] Bottom :  P:C  vs `variable`
-    
+
     Where the stoichiometric ratios are taken from native fields:
         N:C → f"{group}_NC"
         P:C → f"{group}_PC"
-    
+
     Workflow
     --------
     1) Time-filter once with `filter_time` → `ds_t`.
@@ -154,7 +167,7 @@ def kde_stoichiometry_2x2(
     7) Plot density with `pcolormesh`. Optionally underlay up to `scatter_underlay`
        random points to show support. Apply per-variable style overrides (cmap, vmin, vmax).
     8) Save one PNG for the 2×2 figure.
-    
+
     Parameters
     ----------
     ds : xr.Dataset
@@ -211,13 +224,13 @@ def kde_stoichiometry_2x2(
         Gaussian smoothing (in grid cells) applied to the 2D histogram when `method="hist"`.
     random_seed : int, optional (default 12345)
         Seed for reproducible subsampling and underlay selection.
-    
+
     Returns
     -------
     None
         Saves a single PNG named like:
         ``<prefix>__KDE-Stoich__<group>__<variable>__<RegionTag>__<TimeLabel>.png``
-    
+
     Notes
     -----
     - Panels are independently skipped if centers cannot be aligned, alignment fails,
@@ -229,7 +242,7 @@ def kde_stoichiometry_2x2(
     outdir = out_dir(base_dir, figures_root)
     prefix = file_prefix(base_dir)
     label = build_time_window_label(months, years, start_date, end_date)
-    region_tag = (region[0] if region else "Domain")
+    region_tag = region[0] if region else "Domain"
 
     # variables to get
     nc_name = f"{group}_NC"
@@ -240,7 +253,7 @@ def kde_stoichiometry_2x2(
 
     # depth slices
     ds_surf = select_depth(ds_t, "surface", verbose=verbose)
-    ds_bott = select_depth(ds_t, "bottom",  verbose=verbose)
+    ds_bott = select_depth(ds_t, "bottom", verbose=verbose)
 
     # Precompute masks ONCE
     mask_nodes, mask_elems = build_region_masks(ds, region, verbose=verbose)
@@ -265,8 +278,8 @@ def kde_stoichiometry_2x2(
 
         # Apply region mask (node/element aware) using prebuilt masks
         var_da = apply_prebuilt_mask(var_da, mask_nodes, mask_elems)
-        nc_da  = apply_prebuilt_mask(nc_da,  mask_nodes, mask_elems)
-        pc_da  = apply_prebuilt_mask(pc_da,  mask_nodes, mask_elems)
+        nc_da = apply_prebuilt_mask(nc_da, mask_nodes, mask_elems)
+        pc_da = apply_prebuilt_mask(pc_da, mask_nodes, mask_elems)
         return var_da, nc_da, pc_da
 
     # surface & bottom triplets
@@ -275,7 +288,8 @@ def kde_stoichiometry_2x2(
 
     # sanity: space centers must match within each pair for alignment to be meaningful
     def _common_center(a: xr.DataArray, b: xr.DataArray) -> Optional[str]:
-        sa = _space_dim(a); sb = _space_dim(b)
+        sa = _space_dim(a)
+        sb = _space_dim(b)
         return sa if sa == sb else None
 
     # Layout: (0,0)=surf NC; (0,1)=surf PC; (1,0)=bott NC; (1,1)=bott PC
@@ -284,8 +298,8 @@ def kde_stoichiometry_2x2(
     panels = [
         ("surface", "NC", nc_s, var_s, axes[0, 0]),
         ("surface", "PC", pc_s, var_s, axes[0, 1]),
-        ("bottom",  "NC", nc_b, var_b, axes[1, 0]),
-        ("bottom",  "PC", pc_b, var_b, axes[1, 1]),
+        ("bottom", "NC", nc_b, var_b, axes[1, 0]),
+        ("bottom", "PC", pc_b, var_b, axes[1, 1]),
     ]
 
     any_plotted = False
@@ -308,7 +322,10 @@ def kde_stoichiometry_2x2(
             continue
 
         if x.size < min_samples:
-            _vprint(verbose, f"[kde/{side}] only {x.size} finite pairs; need >= {min_samples}. Skipping.")
+            _vprint(
+                verbose,
+                f"[kde/{side}] only {x.size} finite pairs; need >= {min_samples}. Skipping.",
+            )
             ax.axis("off")
             continue
 

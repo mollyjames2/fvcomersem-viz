@@ -6,16 +6,21 @@ import os
 import sys
 import warnings
 import matplotlib
+
 matplotlib.use("Agg", force=True)  # headless backend for batch runs
 
 import numpy as np
 import xarray as xr
-from matplotlib.colors import LogNorm
 
 from fvcomersemviz.io import load_from_base
 from fvcomersemviz.plot import (
-    hr, info, kv, bullet,
-    list_files, summarize_files, print_dataset_summary, plot_call
+    hr,
+    info,
+    kv,
+    list_files,
+    summarize_files,
+    print_dataset_summary,
+    plot_call,
 )
 from fvcomersemviz.utils import out_dir, file_prefix
 from fvcomersemviz.plots.hovmoller import station_hovmoller
@@ -23,7 +28,7 @@ from fvcomersemviz.plots.hovmoller import station_hovmoller
 # ---------------------------------------------------------------------
 # Project paths (EDIT THESE)
 # ---------------------------------------------------------------------
-BASE_DIR     = "/data/proteus1/scratch/yli/project/lake_erie/output_updated_river_var"
+BASE_DIR = "/data/proteus1/scratch/yli/project/lake_erie/output_updated_river_var"
 FILE_PATTERN = "erie_00??.nc"
 FIG_DIR = "/data/proteus1/scratch/moja/projects/Lake_Erie/fviz-plots/"
 
@@ -31,10 +36,10 @@ FIG_DIR = "/data/proteus1/scratch/moja/projects/Lake_Erie/fviz-plots/"
 # Variable groups / composites (optional)
 # ---------------------------------------------------------------------
 GROUPS = {
-    "DOC":   "R1_c + R2_c + R3_c + T1_30d_c + T2_30d_c",
+    "DOC": "R1_c + R2_c + R3_c + T1_30d_c + T2_30d_c",
     "phyto": ["P1_c", "P2_c", "P4_c", "P5_c"],
-    "zoo":   ["Z4_c", "Z5_c", "Z6_c"],
-    "chl":   "P1_Chl + P2_Chl + P4_Chl + P5_Chl",
+    "zoo": ["Z4_c", "Z5_c", "Z6_c"],
+    "chl": "P1_Chl + P2_Chl + P4_Chl + P5_Chl",
 }
 
 # ---------------------------------------------------------------------
@@ -46,23 +51,26 @@ STATIONS = [
 ]
 
 # Example time window
-MONTHS = [4, 5, 6, 7, 8, 9, 10]   # Apr-Oct
-YEARS  = [2018]
+MONTHS = [4, 5, 6, 7, 8, 9, 10]  # Apr-Oct
+YEARS = [2018]
 
 # If your station_hovmoller supports per-variable styles, define them here
 # and pass `styles=PLOT_STYLES` to plot_call (lines are included but commented).
 
 PLOT_STYLES = {
-     "chl":   {"cmap": "Greens", "vmin": 0.0, "vmax": 5.0},
-     "DOC":   {"cmap": "viridis"},
-     "zoo":   {"cmap": "PuBu"},  # or "norm": LogNorm(1e-4, 1e0)
- }
+    "chl": {"cmap": "Greens", "vmin": 0.0, "vmax": 5.0},
+    "DOC": {"cmap": "viridis"},
+    "zoo": {"cmap": "PuBu"},  # or "norm": LogNorm(1e-4, 1e0)
+}
+
 
 def main():
     if not os.environ.get("PYTHONWARNINGS"):
         warnings.filterwarnings("default")
 
-    print(hr("=")); print("Hovmoller examples"); print(hr("="))
+    print(hr("="))
+    print("Hovmoller examples")
+    print(hr("="))
 
     # Discover & load
     info(" Discovering files")
@@ -93,8 +101,10 @@ def main():
         variables=["chl"],
         stations=[STATIONS[0]],
         axis="sigma",
-        base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
-        styles=PLOT_STYLES, 
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        groups=GROUPS,
+        styles=PLOT_STYLES,
     )
 
     # ===============================================================
@@ -109,9 +119,12 @@ def main():
         variables=["DOC"],
         stations=[STATIONS[0]],
         axis="z",
-        z_levels=z_levels,                 # omit to auto-build from the column
-        months=MONTHS, years=YEARS,
-        base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
+        z_levels=z_levels,  # omit to auto-build from the column
+        months=MONTHS,
+        years=YEARS,
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        groups=GROUPS,
         styles=PLOT_STYLES,
     )
 
@@ -126,12 +139,18 @@ def main():
         variables=["zoo"],
         stations=[STATIONS[1]],
         axis="sigma",
-        months=MONTHS, years=YEARS,
-        base_dir=BASE_DIR, figures_root=FIG_DIR, groups=GROUPS,
+        months=MONTHS,
+        years=YEARS,
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        groups=GROUPS,
         styles=PLOT_STYLES,
     )
 
-    print(hr("=")); print("Done"); print(hr("="))
+    print(hr("="))
+    print("Done")
+    print(hr("="))
+
 
 if __name__ == "__main__":
     xr.set_options(use_new_combine_kwarg_defaults=True)

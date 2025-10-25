@@ -28,32 +28,130 @@ Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reprodu
 * Optional performance: `dask[array]`
 
 ---
+Here’s a clean, copy-paste **README** install section that covers:
+
+* User install (with `environment.yml`, env name `fviz`)
+* Developer install (with `environment-dev.yml`, env name `fviz-dev`)
+* Manual install (explicit package list without YAML)
+* Quick verification and cleanup
+
+---
 
 ## Installation
 
-```bash
-# create a clean env with geospatial stack
-conda create -n fviz python=3.11 geopandas shapely pyproj rtree notebook -c conda-forge
-conda activate fviz
+### Option A — User install (recommended)
 
-# install the package
-pip install "git+https://github.com/mollyjames2/fvcomersem-viz.git"
+Use this if you just want to use the package.
+
+1. Create the environment (from `environment.yml`) and activate it:
+
+```bash
+mamba env create -f environment.yml
+mamba activate fviz
+# (use conda instead of mamba if you prefer)
 ```
 
-**Development (editable) install**
+2. Verify:
+
+```bash
+python tests/check_install.py
+# or a tiny smoke test:
+python -c "import fvcomersemviz as m; print('fvcomersemviz', getattr(m,'__version__','n/a'))"
+```
+
+> Note: `environment.yml` installs all dependencies from conda-forge and installs this package (non-editable) via pip inside the same environment.
+
+---
+
+### Option B — Developer install (contributors)
+
+Use this if you plan to modify the code, run tests, or use linting tools.
+
+1. Clone the repository and create the dev environment (from `environment-dev.yml`), then activate it:
 
 ```bash
 git clone https://github.com/mollyjames2/fvcomersem-viz.git
 cd fvcomersem-viz
-pip install -e .
+mamba env create -f environment-dev.yml
+mamba activate fviz-dev
 ```
 
-**Check your installation**
+2. Verify dev setup:
 
 ```bash
-python tests/check_install.py
+python tests/check_install_dev.py
+ruff check .
+pytest -q
 ```
 
+> Notes:
+>
+> * `environment-dev.yml` installs the package in editable mode with `.[dev]` extras (e.g., pytest, ruff).
+> * Edits under `src/fvcomersemviz/` take effect immediately.
+
+---
+
+### Option C — Manual install (no YAML)
+
+If you don’t want to use the YAML files, you can create the environment and install packages explicitly. This keeps all heavy geospatial libs consistent via conda-forge, then installs the package with pip.
+
+Create and activate the env:
+
+```bash
+mamba create -n fviz -c conda-forge \
+  python=3.11 \
+  numpy scipy pandas xarray dask netcdf4 \
+  matplotlib notebook \
+  geopandas shapely pyproj rtree cartopy pip
+mamba activate fviz
+```
+
+Install the package (users, non-editable):
+
+```bash
+python -m pip install "git+https://github.com/mollyjames2/fvcomersem-viz.git"
+# SSH alternative (if your GitHub is set up for SSH):
+# python -m pip install "git+ssh://git@github.com/mollyjames2/fvcomersem-viz.git"
+```
+
+Or, for developers (editable with dev tools) from the repo root:
+
+```bash
+git clone https://github.com/mollyjames2/fvcomersem-viz.git
+cd fvcomersem-viz
+python -m pip install -e ".[dev]"
+```
+
+Verify:
+
+```bash
+python tests/check_install.py       # users
+# or
+python tests/check_install_dev.py   # developers
+```
+If you see
+```
+  All good! fvcomersemviz and its dependencies look ready to run.
+```
+
+---
+
+### Troubleshooting
+
+* Ensure you **activate the environment** before running Python:
+
+  ```bash
+  mamba activate fviz       # or: mamba activate fviz-dev
+  which python              # should point inside your env
+  which pip                 # should point inside your env
+  ```
+* Keep geospatial libs (GDAL/PROJ/GEOS family via geopandas/shapely/pyproj/rtree/cartopy) from **conda-forge**. Avoid mixing pip wheels for those packages in the same env.
+* If you must reinstall cleanly:
+
+  ```bash
+  mamba env remove -n fviz -y
+  mamba env remove -n fviz-dev -y
+  ```
 
 ---
 

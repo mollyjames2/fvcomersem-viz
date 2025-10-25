@@ -9,9 +9,14 @@ import matplotlib.pyplot as plt
 
 from ..io import filter_time, eval_group_or_var, ensure_z_from_sigma
 from ..utils import (
-    out_dir, file_prefix, robust_clims, style_get,
-    build_time_window_label, nearest_index_for_dim,
+    out_dir,
+    file_prefix,
+    robust_clims,
+    style_get,
+    build_time_window_label,
+    nearest_index_for_dim,
 )
+
 
 # ---------------------------------------------------------------------
 # small helpers
@@ -19,6 +24,7 @@ from ..utils import (
 def _vprint(verbose: bool, *args, **kwargs):
     if verbose:
         print(*args, **kwargs)
+
 
 # vectorized depth interpolation helper
 def _interp_profile_to_z(zvec: np.ndarray, avals: np.ndarray, z_levels: np.ndarray) -> np.ndarray:
@@ -31,12 +37,15 @@ def _interp_profile_to_z(zvec: np.ndarray, avals: np.ndarray, z_levels: np.ndarr
     m = np.isfinite(z) & np.isfinite(a)
     if m.sum() < 2:
         return np.full_like(z_levels, np.nan, dtype=float)
-    z_m = z[m]; a_m = a[m]
-    order = np.argsort(z_m)        # ensure ascending z for np.interp
-    z_s = z_m[order]; a_s = a_m[order]
-    zmin, zmax = z_s[0], z_s[-1]   # clamp interpolation range
+    z_m = z[m]
+    a_m = a[m]
+    order = np.argsort(z_m)  # ensure ascending z for np.interp
+    z_s = z_m[order]
+    a_s = a_m[order]
+    zmin, zmax = z_s[0], z_s[-1]  # clamp interpolation range
     zq = np.clip(z_levels, zmin, zmax)
     return np.interp(zq, z_s, a_s)
+
 
 # ---------------------------------------------------------------------
 # Plotting
@@ -162,7 +171,7 @@ def station_hovmoller(
     # time filter first; use this dataset consistently for nearest-index & z
     ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date)
 
-    for (name, lat, lon) in stations:
+    for name, lat, lon in stations:
         # compute nearest indices ONCE per station
         try:
             node_idx = nearest_index_for_dim(ds_t, lat, lon, "node")
@@ -186,12 +195,18 @@ def station_hovmoller(
             # which spatial dim?
             pick_dim = "node" if "node" in da.dims else ("nele" if "nele" in da.dims else None)
             if pick_dim is None:
-                _vprint(verbose, f"[hovmoller:{name}] '{var}' has no 'node'/'nele'; proceeding without spatial slice.")
+                _vprint(
+                    verbose,
+                    f"[hovmoller:{name}] '{var}' has no 'node'/'nele'; proceeding without spatial slice.",
+                )
                 idx = None
             else:
                 idx = node_idx if pick_dim == "node" else nele_idx
                 if idx is None:
-                    _vprint(verbose, f"[hovmoller:{name}] no {pick_dim} coordinates available; skipping.")
+                    _vprint(
+                        verbose,
+                        f"[hovmoller:{name}] no {pick_dim} coordinates available; skipping.",
+                    )
                     continue
                 da = da.isel({pick_dim: idx})
 
@@ -230,7 +245,9 @@ def station_hovmoller(
 
                 fig, ax = plt.subplots(figsize=figsize)
                 pc = ax.pcolormesh(
-                    t, y, A.values.T,
+                    t,
+                    y,
+                    A.values.T,
                     shading="nearest",
                     cmap=cmap_eff,
                     norm=norm_eff,
@@ -238,9 +255,11 @@ def station_hovmoller(
                     vmax=None if norm_eff is not None else vvmax,
                 )
                 ax.set_title(f"{var} — Hovmöller at {name} (sigma, {label})")
-                ax.set_xlabel("Time"); ax.set_ylabel("sigma")
+                ax.set_xlabel("Time")
+                ax.set_ylabel("sigma")
                 ax.set_ylim(np.nanmin(y), np.nanmax(y))
-                cb = fig.colorbar(pc, ax=ax); cb.set_label(var)
+                cb = fig.colorbar(pc, ax=ax)
+                cb.set_label(var)
                 fname = f"{prefix}__Hovmoller-Station-{name}__{var}__sigma__{label}.png"
                 fig.savefig(os.path.join(outdir, fname), dpi=dpi, bbox_inches="tight")
                 plt.close(fig)
@@ -250,12 +269,15 @@ def station_hovmoller(
             else:  # axis == 'z'
                 ds_z = ensure_z_from_sigma(ds_t, verbose=verbose)
                 if "z" not in ds_z and "z_nele" not in ds_z:
-                    _vprint(verbose, f"[hovmoller:{name}] cannot build vertical coords; skipping.")
+                    _vprint(
+                        verbose,
+                        f"[hovmoller:{name}] cannot build vertical coords; skipping.",
+                    )
                     continue
 
                 # choose column’s z profile aligned with the same index we sliced above
                 if pick_dim == "node" and "z" in ds_z and idx is not None:
-                    z_col = ds_z["z"].isel(node=idx)       # (time, siglay)
+                    z_col = ds_z["z"].isel(node=idx)  # (time, siglay)
                 elif pick_dim == "nele" and "z_nele" in ds_z and idx is not None:
                     z_col = ds_z["z_nele"].isel(nele=idx)  # (time, siglay)
                 else:
@@ -273,7 +295,8 @@ def station_hovmoller(
                 # interpolate (time, siglay) -> (time, z)
                 hov = xr.apply_ufunc(
                     _interp_profile_to_z,
-                    z_col, A,                                   # both (time, siglay)
+                    z_col,
+                    A,  # both (time, siglay)
                     input_core_dims=[["siglay"], ["siglay"]],
                     output_core_dims=[["z"]],
                     vectorize=True,
@@ -292,7 +315,9 @@ def station_hovmoller(
 
                 fig, ax = plt.subplots(figsize=figsize)
                 pc = ax.pcolormesh(
-                    t, zlev, hov.values.T,
+                    t,
+                    zlev,
+                    hov.values.T,
                     shading="nearest",
                     cmap=cmap_eff,
                     norm=norm_eff,
@@ -300,9 +325,11 @@ def station_hovmoller(
                     vmax=None if norm_eff is not None else vvmax,
                 )
                 ax.set_title(f"{var} — Hovmöller at {name} (z, {label})")
-                ax.set_xlabel("Time"); ax.set_ylabel("Depth (m)")
+                ax.set_xlabel("Time")
+                ax.set_ylabel("Depth (m)")
                 ax.set_ylim(np.nanmin(zlev), np.nanmax(zlev))  # negative at bottom, 0 at top
-                cb = fig.colorbar(pc, ax=ax); cb.set_label(var)
+                cb = fig.colorbar(pc, ax=ax)
+                cb.set_label(var)
                 fname = f"{prefix}__Hovmoller-Station-{name}__{var}__z__{label}.png"
                 fig.savefig(os.path.join(outdir, fname), dpi=dpi, bbox_inches="tight")
                 plt.close(fig)

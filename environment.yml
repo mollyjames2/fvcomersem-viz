@@ -1,0 +1,33 @@
+name: fviz
+channels:
+  - conda-forge
+dependencies:
+  # Python
+  - python=3.11
+
+  # Core scientific stack
+  - numpy
+  - scipy
+  - pandas
+  - xarray
+  - dask
+  - netcdf4
+
+  # Plotting
+  - matplotlib
+  - notebook
+
+  # Geospatial stack
+  - geopandas
+  - shapely
+  - pyproj
+  - rtree
+  - cartopy
+
+  # Install the package from GitHub via pip (non-editable)
+  - pip
+  - pip:
+      - "git+https://github.com/mollyjames2/fvcomersem-viz.git"
+      # If you use SSH instead:
+      # - "git+ssh://git@github.com/mollyjames2/fvcomersem-viz.git"
+

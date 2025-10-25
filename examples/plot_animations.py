@@ -7,32 +7,34 @@ import warnings
 import xarray as xr
 
 from fvcomersemviz.io import load_from_base
-from fvcomersemviz.plots.animate import animate_timeseries, animate_maps
+from fvcomersemviz.plots.animate import animate_maps
 
 # -----------------------------------------------------------------------------
 # User inputs (EDIT FOR YOUR PROJECT)
 # -----------------------------------------------------------------------------
-BASE_DIR     = "/data/proteus1/scratch/yli/project/lake_erie/output_updated_river_var"
+BASE_DIR = "/data/proteus1/scratch/yli/project/lake_erie/output_updated_river_var"
 FILE_PATTERN = "erie_00??.nc"
-FIG_DIR      = "/data/proteus1/scratch/moja/projects/Lake_Erie/fvcomersem-viz/examples/plots/"
+FIG_DIR = (
+    "/data/proteus1/scratch/moja/projects/Lake_Erie/fvcomersem-viz/examples/plots/"
+)
 
 # -----------------------------
 # Variable groups / composites
 # -----------------------------
 GROUPS = {
-    "DOC":   "R1_c + R2_c + R3_c + T1_30d_c + T2_30d_c",  # dissolved organic carbon (sum of pools)
-    "phyto": ["P1_c", "P2_c", "P4_c", "P5_c"],            # total phytoplankton carbon (sum)
-    "zoo":   ["Z4_c", "Z5_c", "Z6_c"],                    # total zooplankton carbon (sum)
-    "chl":   "P1_Chl + P2_Chl + P4_Chl + P5_Chl",         # total chlorophyll (sum)
+    "DOC": "R1_c + R2_c + R3_c + T1_30d_c + T2_30d_c",  # dissolved organic carbon (sum of pools)
+    "phyto": ["P1_c", "P2_c", "P4_c", "P5_c"],  # total phytoplankton carbon (sum)
+    "zoo": ["Z4_c", "Z5_c", "Z6_c"],  # total zooplankton carbon (sum)
+    "chl": "P1_Chl + P2_Chl + P4_Chl + P5_Chl",  # total chlorophyll (sum)
 }
 
 # Optional styles (line colors applied per variable when present)
 PLOT_STYLES = {
-    "temp":  {"line_color": "lightblue"},
-    "DOC":   {"line_color": "blue"},
-    "chl":   {"line_color": "lightgreen"},
+    "temp": {"line_color": "lightblue"},
+    "DOC": {"line_color": "blue"},
+    "chl": {"line_color": "lightgreen"},
     "phyto": {"line_color": "darkgreen"},
-    "zoo":   {"line_color": "purple"},
+    "zoo": {"line_color": "purple"},
 }
 
 # -----------------------------
@@ -50,9 +52,10 @@ STATIONS = [
 # List of (region_name, spec_dict)
 REGIONS = [
     ("Central", {"shapefile": "../data/shapefiles/central_basin_single.shp"}),
-    ("East",    {"shapefile": "../data/shapefiles/east_basin_single.shp"}),
-    ("West",    {"shapefile": "../data/shapefiles/west_basin_single.shp"}),
+    ("East", {"shapefile": "../data/shapefiles/east_basin_single.shp"}),
+    ("West", {"shapefile": "../data/shapefiles/west_basin_single.shp"}),
 ]
+
 
 # -----------------------------------------------------------------------------
 # Runner
@@ -170,7 +173,7 @@ def main():
     #     styles=PLOT_STYLES,
     #     verbose=False,
     # )
-    
+
     # ==========================================================================
     # === ANIMATION EXAMPLES =========================================
     # ==========================================================================
@@ -180,15 +183,17 @@ def main():
     print("[animate] domain map animation (hourly, surface, June 2018)")
     animate_maps(
         ds,
-        variables=["temp", "chl"],   # native variables or GROUPS keys both work
+        variables=["temp", "chl"],  # native variables or GROUPS keys both work
         scope="domain",
-        months=6, years=2018,
+        months=6,
+        years=2018,
         depth="surface",
         groups=GROUPS,
-        base_dir=BASE_DIR, figures_root=FIG_DIR,
-        frequency="daily",          #  hourly | daily | monthly
-        grid_on=True,                # draw mesh overlay
-        styles=PLOT_STYLES,           # optional per-var map styling
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        frequency="daily",  #  hourly | daily | monthly
+        grid_on=True,  # draw mesh overlay
+        styles=PLOT_STYLES,  # optional per-var map styling
         verbose=True,
     )
 
@@ -199,10 +204,12 @@ def main():
         variables=["chl"],
         scope="region",
         regions=REGIONS,
-        months=[6, 7, 8], years=2018,
-        depth={"z_m": -10},          # absolute metres below surface (negative down)
+        months=[6, 7, 8],
+        years=2018,
+        depth={"z_m": -10},  # absolute metres below surface (negative down)
         groups=GROUPS,
-        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
         grid_on=False,
         styles=PLOT_STYLES,
         verbose=True,
@@ -217,7 +224,8 @@ def main():
         years=2018,
         depth="bottom",
         groups=GROUPS,
-        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
         frequency="monthly",
         styles=PLOT_STYLES,
         verbose=True,
@@ -231,7 +239,8 @@ def main():
         scope="domain",
         depth="depth_avg",
         groups=GROUPS,
-        base_dir=BASE_DIR, figures_root=FIG_DIR,
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
         at_times=["2018-06-01 00:00", "2018-06-10 12:00", "2018-06-20 00:00"],
         grid_on=True,
         styles=PLOT_STYLES,

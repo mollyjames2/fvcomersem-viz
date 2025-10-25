@@ -2,6 +2,7 @@ from __future__ import annotations
 
 # --- Safe, headless backend for batch animations (avoids Tk crashes) ---
 import matplotlib as _mpl
+
 # If a GUI backend is active (TkAgg/Qt/MacOSX/etc), switch to Agg for saving.
 try:
     _backend = _mpl.get_backend().lower()
@@ -21,27 +22,40 @@ import pandas as pd
 
 from ..io import filter_time, eval_group_or_var
 from ..utils import (
-    out_dir, file_prefix, depth_tag, build_time_window_label, style_get,
-    select_depth, select_da_by_z,build_triangulation,
-    robust_clims
+    out_dir,
+    file_prefix,
+    depth_tag,
+    build_time_window_label,
+    style_get,
+    select_depth,
+    select_da_by_z,
+    build_triangulation,
 )
 
 from ..regions import build_region_masks, nearest_node_index
 
 
-
-
 # --- helper: filename builder with explicit combined_by tag ---
-def _fname(prefix: str, scope: str, region_name: Optional[str], station_name: Optional[str],
-           var_or_multi: str, tag: str, label: str,
-           combined_by: Optional[str]) -> str:
-    scope_str = "Domain" if scope == "domain" else (
-        f"Region_{region_name}" if scope == "region" else f"Station_{station_name}"
+def _fname(
+    prefix: str,
+    scope: str,
+    region_name: Optional[str],
+    station_name: Optional[str],
+    var_or_multi: str,
+    tag: str,
+    label: str,
+    combined_by: Optional[str],
+) -> str:
+    scope_str = (
+        "Domain"
+        if scope == "domain"
+        else (f"Region_{region_name}" if scope == "region" else f"Station_{station_name}")
     )
     base = f"{prefix}__{scope_str}__{var_or_multi}__{tag}__{label}__TimeseriesAnim"
     if combined_by:
         base += f"__CombinedBy{combined_by.capitalize()}"
     return base + ".gif"
+
 
 def _validate_combine_by(scope: str, combine_by: Optional[str]) -> Optional[str]:
     if combine_by is None:
@@ -50,20 +64,26 @@ def _validate_combine_by(scope: str, combine_by: Optional[str]) -> Optional[str]
     if combine_by not in ("var", "region", "station"):
         raise ValueError("combine_by must be one of: 'var', 'region', 'station', or None")
     if scope == "domain" and combine_by in ("region", "station"):
-        raise ValueError("combine_by='region' or 'station' only make sense with scope='region' or scope='station'.")
+        raise ValueError(
+            "combine_by='region' or 'station' only make sense with scope='region' or scope='station'."
+        )
     if scope == "region" and combine_by == "station":
         raise ValueError("combine_by='station' not valid when scope='region'.")
     if scope == "station" and combine_by == "region":
         raise ValueError("combine_by='region' not valid when scope='station'.")
     return combine_by
-    
+
     # -----------------------
+
+
 # Local helpers (required)
 # -----------------------
+
 
 def _vprint(verbose: bool, *args, **kwargs):
     if verbose:
         print(*args, **kwargs)
+
 
 def _ensure_list_int(v: Optional[Union[int, Sequence[int]]]) -> Optional[List[int]]:
     if v is None:
@@ -72,19 +92,27 @@ def _ensure_list_int(v: Optional[Union[int, Sequence[int]]]) -> Optional[List[in
         return [int(v)]
     return list(v)
 
-def _validate_scope(scope: str,
-                    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]],
-                    stations: Optional[Sequence[Tuple[str, float, float]]]) -> str:
+
+def _validate_scope(
+    scope: str,
+    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]],
+    stations: Optional[Sequence[Tuple[str, float, float]]],
+) -> str:
     scope = scope.lower().strip()
     if scope not in ("domain", "region", "station"):
         raise ValueError("scope must be one of: 'domain', 'region', 'station'")
     if scope == "region" and (not regions or len(regions) == 0):
-        raise ValueError("scope='region' requires a non-empty list of regions ([(name, spec), ...]).")
+        raise ValueError(
+            "scope='region' requires a non-empty list of regions ([(name, spec), ...])."
+        )
     if scope == "station" and (not stations or len(stations) == 0):
-        raise ValueError("scope='station' requires a non-empty list of stations ([(name, lat, lon), ...]).")
+        raise ValueError(
+            "scope='station' requires a non-empty list of stations ([(name, lat, lon), ...])."
+        )
     return scope
 
-def _space_mean(da: xr.DataArray, ds_full: xr.Dataset, *, verbose: bool=False) -> xr.DataArray:
+
+def _space_mean(da: xr.DataArray, ds_full: xr.Dataset, *, verbose: bool = False) -> xr.DataArray:
     """Weighted spatial mean using 'art1' when alignable; else simple mean over non-time dims."""
     space_dims = [d for d in da.dims if d != "time"]
     if not space_dims:
@@ -99,10 +127,16 @@ def _space_mean(da: xr.DataArray, ds_full: xr.Dataset, *, verbose: bool=False) -
                     w_aligned = w_aligned.sel({d: da[d]})
             return (da * w_aligned).sum(space_dims) / w_aligned.sum(space_dims)
         except Exception as e:
-            _vprint(verbose, f"[space-mean] weight alignment failed ({e}); simple mean fallback.")
+            _vprint(
+                verbose,
+                f"[space-mean] weight alignment failed ({e}); simple mean fallback.",
+            )
     return da.mean(space_dims)
 
-def _apply_depth(da: xr.DataArray, ds_for_z: xr.Dataset, depth: Any, *, verbose: bool) -> xr.DataArray:
+
+def _apply_depth(
+    da: xr.DataArray, ds_for_z: xr.Dataset, depth: Any, *, verbose: bool
+) -> xr.DataArray:
     """
     Depth modes:
       - 'surface' | 'bed' | 'bottom' | 'depth_avg'
@@ -110,6 +144,7 @@ def _apply_depth(da: xr.DataArray, ds_for_z: xr.Dataset, depth: Any, *, verbose:
       - absolute metres: float (e.g., -10.0), or {'z_m': -10}
     """
     from ..utils import select_depth, select_da_by_z
+
     if depth is None:
         return da
     if isinstance(depth, str) and depth.lower() == "bed":
@@ -124,10 +159,14 @@ def _apply_depth(da: xr.DataArray, ds_for_z: xr.Dataset, depth: Any, *, verbose:
         return select_da_by_z(da2, ds_for_z, float(depth["z_m"]), verbose=verbose)
     return da2
 
-def _title_bits(scope: str,
-                region_name: Optional[str],
-                station_name: Optional[str],
-                tag: str, label: str) -> str:
+
+def _title_bits(
+    scope: str,
+    region_name: Optional[str],
+    station_name: Optional[str],
+    tag: str,
+    label: str,
+) -> str:
     if scope == "domain":
         return f"Domain ({tag}, {label})"
     if scope == "region":
@@ -136,14 +175,19 @@ def _title_bits(scope: str,
         return f"Station {station_name} ({tag}, {label})"
     return f"{tag}, {label}"
 
+
 # --- Helpers for explicit instants & friendly frequencies ---
 
-def _timepoints_to_list(at_time: Optional[Any], at_times: Optional[Sequence[Any]]) -> Optional[List[pd.Timestamp]]:
+
+def _timepoints_to_list(
+    at_time: Optional[Any], at_times: Optional[Sequence[Any]]
+) -> Optional[List[pd.Timestamp]]:
     if at_times is not None:
         return [pd.to_datetime(t) for t in at_times]
     if at_time is not None:
         return [pd.to_datetime(at_time)]
     return None
+
 
 def _choose_instants(
     da: xr.DataArray,
@@ -158,6 +202,7 @@ def _choose_instants(
         chosen = pd.to_datetime(np.atleast_1d(_one["time"].values)[0])
         out.append((pd.Timestamp(chosen), _one))
     return out
+
 
 def _normalize_frequency(freq: Optional[str]) -> Optional[str]:
     """
@@ -182,25 +227,25 @@ def animate_timeseries(
     *,
     vars: Sequence[str],
     groups: Optional[Dict[str, Any]],
-    scope: str,                                  # 'domain' | 'region' | 'station'
-    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,   # list of (name, spec)
-    stations: Optional[Sequence[Tuple[str, float, float]]] = None,    # list of (name, lat, lon)
+    scope: str,  # 'domain' | 'region' | 'station'
+    regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,  # list of (name, spec)
+    stations: Optional[Sequence[Tuple[str, float, float]]] = None,  # list of (name, lat, lon)
     # time filters (any combination)
     months: Optional[Union[int, Sequence[int]]] = None,
-    years: Optional[Union[int, Sequence[int]]]  = None,
+    years: Optional[Union[int, Sequence[int]]] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str]   = None,
+    end_date: Optional[str] = None,
     # NEW: timestep control
     at_time: Optional[Any] = None,
     at_times: Optional[Sequence[Any]] = None,
     time_method: str = "nearest",
-    frequency: Optional[str] = None,                    # 'hourly' | 'daily' | 'monthly' | None
+    frequency: Optional[str] = None,  # 'hourly' | 'daily' | 'monthly' | None
     # depth
     depth: Any = "surface",
     # output + styling
     base_dir: str = "",
     figures_root: str = "",
-    combine_by: Optional[str] = None,                   # 'var' | 'region' | 'station' | None
+    combine_by: Optional[str] = None,  # 'var' | 'region' | 'station' | None
     linewidth: float = 1.8,
     figsize: Tuple[int, int] = (10, 4),
     dpi: int = 150,
@@ -297,11 +342,9 @@ def animate_timeseries(
       a frequency tag like `__FreqDaily`.
     """
 
-
     # -----------------------
     # Local helpers (new)
     # -----------------------
-   
 
     def _frame_indices_for_time_axis(t_axis: np.ndarray) -> List[int]:
         """
@@ -311,7 +354,7 @@ def animate_timeseries(
             return [0]
         idx = pd.to_datetime(t_axis)
         desired_list = _timepoints_to_list(at_time, at_times)
-        freq_alias   = _normalize_frequency(frequency)
+        freq_alias = _normalize_frequency(frequency)
 
         if desired_list:
             pos = idx.get_indexer(desired_list, method=time_method if time_method else "nearest")
@@ -349,18 +392,28 @@ def animate_timeseries(
     combine_by = _validate_combine_by(scope, combine_by)
 
     months_l = _ensure_list_int(months)
-    years_l  = _ensure_list_int(years)
+    years_l = _ensure_list_int(years)
 
-    dtag   = depth_tag(depth)
+    dtag = depth_tag(depth)
     tlabel = build_time_window_label(months_l, years_l, start_date, end_date)
     prefix = file_prefix(base_dir) if base_dir else "dataset"
     outdir = out_dir(base_dir, figures_root) if figures_root else os.getcwd()
 
     # For filename tagging when a cadence is used (not for explicit instants)
     freq_alias_for_tag = _normalize_frequency(frequency)
-    freq_tag = f"__Freq{str(frequency).capitalize()}" if (freq_alias_for_tag and not _timepoints_to_list(at_time, at_times)) else ""
+    freq_tag = (
+        f"__Freq{str(frequency).capitalize()}"
+        if (freq_alias_for_tag and not _timepoints_to_list(at_time, at_times))
+        else ""
+    )
 
-    ds_win = filter_time(select_depth(ds, depth, verbose=verbose), months_l, years_l, start_date, end_date)
+    ds_win = filter_time(
+        select_depth(ds, depth, verbose=verbose),
+        months_l,
+        years_l,
+        start_date,
+        end_date,
+    )
 
     # resolve variables (native or via GROUPS)
     resolved: List[Tuple[str, xr.DataArray]] = []
@@ -385,21 +438,25 @@ def animate_timeseries(
         scopes = [("station", None, st) for st in stations]  # type: ignore[arg-type]
 
     # helper: 1D series for a given var & scope item
-    def series_for(scope_kind: str,
-                   var_name: str,
-                   da: xr.DataArray,
-                   region_name: Optional[str],
-                   station_tuple: Optional[Tuple[str, float, float]]) -> Tuple[np.ndarray, np.ndarray]:
+    def series_for(
+        scope_kind: str,
+        var_name: str,
+        da: xr.DataArray,
+        region_name: Optional[str],
+        station_tuple: Optional[Tuple[str, float, float]],
+    ) -> Tuple[np.ndarray, np.ndarray]:
         target = da
         if scope_kind == "region":
             spec = None
-            for (nm, sp) in regions:  # type: ignore[iteration-over-optional]
+            for nm, sp in regions:  # type: ignore[iteration-over-optional]
                 if nm == region_name:
                     spec = sp
                     break
             if spec is None:
                 raise KeyError(f"Region '{region_name}' not found in regions list.")
-            mask_nodes, mask_elems = build_region_masks(ds_win, (region_name, spec), verbose=verbose)
+            mask_nodes, mask_elems = build_region_masks(
+                ds_win, (region_name, spec), verbose=verbose
+            )
             if mask_nodes is not None:
                 for d in ("node", "nnode", "nodes"):
                     if d in target.dims and isinstance(mask_nodes, np.ndarray):
@@ -435,7 +492,7 @@ def animate_timeseries(
         for scope_kind, region_name, station_tuple in scopes:
             # gather series across variables for this scope item
             series = []
-            for (vname, da) in resolved:
+            for vname, da in resolved:
                 try:
                     t, y = series_for(scope_kind, vname, da, region_name, station_tuple)
                     series.append((vname, t, y))
@@ -449,29 +506,48 @@ def animate_timeseries(
 
             ymin = np.nanmin([np.nanmin(y) for (_, _, y) in series])
             ymax = np.nanmax([np.nanmax(y) for (_, _, y) in series])
-            pad  = 0.05 * (ymax - ymin if ymax > ymin else (abs(ymax) + 1.0))
+            pad = 0.05 * (ymax - ymin if ymax > ymin else (abs(ymax) + 1.0))
 
             fig, ax = plt.subplots(figsize=figsize)
             lines = {}
-            for (vname, _t, _y) in series:
+            for vname, _t, _y in series:
                 color = style_get(vname, styles, "line_color", None)
                 (ln,) = ax.plot([], [], lw=linewidth, label=vname, color=color)
                 lines[vname] = ln
-            ax.set_xlim(t0[0], t0[-1]); ax.set_ylim(ymin - pad, ymax + pad)
-            ax.set_xlabel("Time"); ax.set_ylabel("Value")
-            title = _title_bits(scope_kind, region_name, (station_tuple[0] if station_tuple else None), dtag, tlabel)
-            ax.set_title(title); ax.legend(loc="best")
+            ax.set_xlim(t0[0], t0[-1])
+            ax.set_ylim(ymin - pad, ymax + pad)
+            ax.set_xlabel("Time")
+            ax.set_ylabel("Value")
+            title = _title_bits(
+                scope_kind,
+                region_name,
+                (station_tuple[0] if station_tuple else None),
+                dtag,
+                tlabel,
+            )
+            ax.set_title(title)
+            ax.legend(loc="best")
 
             def update(i):
                 k = frames_idx[i]
-                for (vname, t, y) in series:
-                    lines[vname].set_data(t[:k+1], y[:k+1])
+                for vname, t, y in series:
+                    lines[vname].set_data(t[: k + 1], y[: k + 1])
                 return tuple(lines.values())
 
-            ani = animation.FuncAnimation(fig, update, frames=len(frames_idx), interval=80, blit=False)
+            ani = animation.FuncAnimation(
+                fig, update, frames=len(frames_idx), interval=80, blit=False
+            )
             var_label = "multi"
-            fname = _fname(prefix, scope_kind, region_name, (station_tuple[0] if station_tuple else None),
-                           var_label, dtag, f"{tlabel}{freq_tag}", combined_by="var")
+            fname = _fname(
+                prefix,
+                scope_kind,
+                region_name,
+                (station_tuple[0] if station_tuple else None),
+                var_label,
+                dtag,
+                f"{tlabel}{freq_tag}",
+                combined_by="var",
+            )
             path = os.path.join(outdir, fname)
             ani.save(path, writer=animation.PillowWriter(fps=10), dpi=dpi)
             plt.close(fig)
@@ -482,14 +558,17 @@ def animate_timeseries(
 
     # ---------- MODE B: combine_by == 'region' (scope='region'; one animation per variable; lines = regions) ----------
     if combine_by == "region":
-        for (vname, da) in resolved:
+        for vname, da in resolved:
             series = []
-            for (scope_kind, region_name, _st) in scopes:  # scopes are all regions here
+            for scope_kind, region_name, _st in scopes:  # scopes are all regions here
                 try:
                     t, y = series_for(scope_kind, vname, da, region_name, None)
                     series.append((region_name, t, y))
                 except Exception as e:
-                    _vprint(verbose, f"[animate] region '{region_name}' for '{vname}' failed -> {e}")
+                    _vprint(
+                        verbose,
+                        f"[animate] region '{region_name}' for '{vname}' failed -> {e}",
+                    )
             if not series:
                 continue
 
@@ -498,27 +577,40 @@ def animate_timeseries(
 
             ymin = np.nanmin([np.nanmin(y) for (_, _, y) in series])
             ymax = np.nanmax([np.nanmax(y) for (_, _, y) in series])
-            pad  = 0.05 * (ymax - ymin if ymax > ymin else (abs(ymax) + 1.0))
+            pad = 0.05 * (ymax - ymin if ymax > ymin else (abs(ymax) + 1.0))
 
             fig, ax = plt.subplots(figsize=figsize)
             lines = {}
-            for (rname, _t, _y) in series:
+            for rname, _t, _y in series:
                 color = style_get(rname, styles, "line_color", None)
                 (ln,) = ax.plot([], [], lw=linewidth, label=rname, color=color)
                 lines[rname] = ln
-            ax.set_xlim(t0[0], t0[-1]); ax.set_ylim(ymin - pad, ymax + pad)
-            ax.set_xlabel("Time"); ax.set_ylabel(vname)
+            ax.set_xlim(t0[0], t0[-1])
+            ax.set_ylim(ymin - pad, ymax + pad)
+            ax.set_xlabel("Time")
+            ax.set_ylabel(vname)
             ax.set_title(f"{vname} — Regions ({dtag}, {tlabel})")
             ax.legend(loc="best")
 
             def update(i):
                 k = frames_idx[i]
-                for (rname, t, y) in series:
-                    lines[rname].set_data(t[:k+1], y[:k+1])
+                for rname, t, y in series:
+                    lines[rname].set_data(t[: k + 1], y[: k + 1])
                 return tuple(lines.values())
 
-            ani = animation.FuncAnimation(fig, update, frames=len(frames_idx), interval=80, blit=False)
-            fname = _fname(prefix, "region", "All", None, vname, dtag, f"{tlabel}{freq_tag}", combined_by="region")
+            ani = animation.FuncAnimation(
+                fig, update, frames=len(frames_idx), interval=80, blit=False
+            )
+            fname = _fname(
+                prefix,
+                "region",
+                "All",
+                None,
+                vname,
+                dtag,
+                f"{tlabel}{freq_tag}",
+                combined_by="region",
+            )
             path = os.path.join(outdir, fname)
             ani.save(path, writer=animation.PillowWriter(fps=10), dpi=dpi)
             plt.close(fig)
@@ -529,14 +621,17 @@ def animate_timeseries(
 
     # ---------- MODE C: combine_by == 'station' (scope='station'; one animation per variable; lines = stations) ----------
     if combine_by == "station":
-        for (vname, da) in resolved:
+        for vname, da in resolved:
             series = []
-            for (scope_kind, _r, st) in scopes:  # scopes are all stations here
+            for scope_kind, _r, st in scopes:  # scopes are all stations here
                 try:
                     t, y = series_for(scope_kind, vname, da, None, st)
                     series.append((st[0], t, y))  # label by station name
                 except Exception as e:
-                    _vprint(verbose, f"[animate] station '{st[0]}' for '{vname}' failed -> {e}")
+                    _vprint(
+                        verbose,
+                        f"[animate] station '{st[0]}' for '{vname}' failed -> {e}",
+                    )
             if not series:
                 continue
 
@@ -545,27 +640,40 @@ def animate_timeseries(
 
             ymin = np.nanmin([np.nanmin(y) for (_, _, y) in series])
             ymax = np.nanmax([np.nanmax(y) for (_, _, y) in series])
-            pad  = 0.05 * (ymax - ymin if ymax > ymin else (abs(ymax) + 1.0))
+            pad = 0.05 * (ymax - ymin if ymax > ymin else (abs(ymax) + 1.0))
 
             fig, ax = plt.subplots(figsize=figsize)
             lines = {}
-            for (stname, _t, _y) in series:
+            for stname, _t, _y in series:
                 color = style_get(stname, styles, "line_color", None)
                 (ln,) = ax.plot([], [], lw=linewidth, label=stname, color=color)
                 lines[stname] = ln
-            ax.set_xlim(t0[0], t0[-1]); ax.set_ylim(ymin - pad, ymax + pad)
-            ax.set_xlabel("Time"); ax.set_ylabel(vname)
+            ax.set_xlim(t0[0], t0[-1])
+            ax.set_ylim(ymin - pad, ymax + pad)
+            ax.set_xlabel("Time")
+            ax.set_ylabel(vname)
             ax.set_title(f"{vname} — Stations ({dtag}, {tlabel})")
             ax.legend(loc="best")
 
             def update(i):
                 k = frames_idx[i]
-                for (stname, t, y) in series:
-                    lines[stname].set_data(t[:k+1], y[:k+1])
+                for stname, t, y in series:
+                    lines[stname].set_data(t[: k + 1], y[: k + 1])
                 return tuple(lines.values())
 
-            ani = animation.FuncAnimation(fig, update, frames=len(frames_idx), interval=80, blit=False)
-            fname = _fname(prefix, "station", None, "All", vname, dtag, f"{tlabel}{freq_tag}", combined_by="station")
+            ani = animation.FuncAnimation(
+                fig, update, frames=len(frames_idx), interval=80, blit=False
+            )
+            fname = _fname(
+                prefix,
+                "station",
+                None,
+                "All",
+                vname,
+                dtag,
+                f"{tlabel}{freq_tag}",
+                combined_by="station",
+            )
             path = os.path.join(outdir, fname)
             ani.save(path, writer=animation.PillowWriter(fps=10), dpi=dpi)
             plt.close(fig)
@@ -576,7 +684,7 @@ def animate_timeseries(
 
     # ---------- MODE D: combine_by is None (no combining; one per scope item × variable) ----------
     for scope_kind, region_name, station_tuple in scopes:
-        for (vname, da) in resolved:
+        for vname, da in resolved:
             try:
                 t, y = series_for(scope_kind, vname, da, region_name, station_tuple)
             except Exception as e:
@@ -591,18 +699,32 @@ def animate_timeseries(
             fig, ax = plt.subplots(figsize=figsize)
             color = style_get(vname, styles, "line_color", None)
             (line,) = ax.plot([], [], lw=linewidth, color=color)
-            ax.set_xlim(t[0], t[-1]); ax.set_ylim(ymin - pad, ymax + pad)
-            ax.set_xlabel("Time"); ax.set_ylabel(vname)
-            ax.set_title(f"{vname} — {_title_bits(scope_kind, region_name, (station_tuple[0] if station_tuple else None), dtag, tlabel)}")
+            ax.set_xlim(t[0], t[-1])
+            ax.set_ylim(ymin - pad, ymax + pad)
+            ax.set_xlabel("Time")
+            ax.set_ylabel(vname)
+            ax.set_title(
+                f"{vname} — {_title_bits(scope_kind, region_name, (station_tuple[0] if station_tuple else None), dtag, tlabel)}"
+            )
 
             def update(i):
                 k = frames_idx[i]
-                line.set_data(t[:k+1], y[:k+1])
+                line.set_data(t[: k + 1], y[: k + 1])
                 return (line,)
 
-            ani = animation.FuncAnimation(fig, update, frames=len(frames_idx), interval=80, blit=True)
-            fname = _fname(prefix, scope_kind, region_name, (station_tuple[0] if station_tuple else None),
-                           vname, dtag, f"{tlabel}{freq_tag}", combined_by=None)
+            ani = animation.FuncAnimation(
+                fig, update, frames=len(frames_idx), interval=80, blit=True
+            )
+            fname = _fname(
+                prefix,
+                scope_kind,
+                region_name,
+                (station_tuple[0] if station_tuple else None),
+                vname,
+                dtag,
+                f"{tlabel}{freq_tag}",
+                combined_by=None,
+            )
             path = os.path.join(outdir, fname)
             ani.save(path, writer=animation.PillowWriter(fps=10), dpi=dpi)
             plt.close(fig)
@@ -610,23 +732,24 @@ def animate_timeseries(
             _vprint(verbose, f"[animate] saved: {path}")
 
     return outputs
- 
+
+
 def animate_maps(
     ds: xr.Dataset,
     *,
     variables: Sequence[str],
-    scope: str = "domain",                        # 'domain' | 'region'
+    scope: str = "domain",  # 'domain' | 'region'
     regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,
     # time filters (window)
     months: Optional[Union[int, Sequence[int]]] = None,
-    years: Optional[Union[int, Sequence[int]]]  = None,
+    years: Optional[Union[int, Sequence[int]]] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str]   = None,
+    end_date: Optional[str] = None,
     # optional explicit instants
     at_time: Optional[Any] = None,
     at_times: Optional[Sequence[Any]] = None,
     time_method: str = "nearest",
-    frequency: Optional[str] = None,              # 'hourly' | 'daily' | 'monthly' | None
+    frequency: Optional[str] = None,  # 'hourly' | 'daily' | 'monthly' | None
     # depth selection
     depth: Any = "surface",
     # IO / styling
@@ -634,9 +757,11 @@ def animate_maps(
     figures_root: str = "",
     groups: Optional[Dict[str, Any]] = None,
     cmap: str = "viridis",
-    clim: Optional[Tuple[float, float]] = None,   # overrides robust if provided (unless vmin/vmax set via styles)
+    clim: Optional[
+        Tuple[float, float]
+    ] = None,  # overrides robust if provided (unless vmin/vmax set via styles)
     robust_q: Tuple[float, float] = (5, 95),
-    shading: str = "gouraud",                     # node-centered; element-centered will force 'flat'
+    shading: str = "gouraud",  # node-centered; element-centered will force 'flat'
     grid_on: bool = False,
     figsize: Tuple[float, float] = (8, 6),
     dpi: int = 150,
@@ -754,21 +879,23 @@ def animate_maps(
     if scope not in ("domain", "region"):
         raise ValueError("scope must be 'domain' or 'region'")
     if scope == "region" and (not regions or len(regions) == 0):
-        raise ValueError("scope='region' requires a non-empty list of regions ([(name, spec), ...]).")
+        raise ValueError(
+            "scope='region' requires a non-empty list of regions ([(name, spec), ...])."
+        )
 
     # normalize month/year lists
     months_l = _ensure_list_int(months)
-    years_l  = _ensure_list_int(years)
+    years_l = _ensure_list_int(years)
 
     # labels / paths
-    dtag   = depth_tag(depth)
+    dtag = depth_tag(depth)
     tlabel = build_time_window_label(months_l, years_l, start_date, end_date)
     prefix = file_prefix(base_dir) if base_dir else "dataset"
     outdir = out_dir(base_dir, figures_root) if figures_root else os.getcwd()
 
     # select depth + time window
     ds_depth = select_depth(ds, depth, verbose=verbose)
-    ds_t     = filter_time(ds_depth, months_l, years_l, start_date, end_date)
+    ds_t = filter_time(ds_depth, months_l, years_l, start_date, end_date)
 
     # triangulation from base ds (expects lon/lat + connectivity)
     tri = build_triangulation(ds)
@@ -776,9 +903,9 @@ def animate_maps(
     outputs: List[str] = []
 
     # region masks
-    def _mask_for_region(scope_kind: str,
-                         region_name: Optional[str],
-                         spec: Optional[Dict[str, Any]]) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def _mask_for_region(
+        scope_kind: str, region_name: Optional[str], spec: Optional[Dict[str, Any]]
+    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         if scope_kind == "domain":
             return (None, None)
         mask_nodes, mask_elems = build_region_masks(ds_t, (region_name, spec), verbose=verbose)
@@ -803,13 +930,13 @@ def animate_maps(
 
     # desired explicit instants (if provided)
     desired_list = _timepoints_to_list(at_time, at_times)
-    freq_alias   = _normalize_frequency(frequency)
+    freq_alias = _normalize_frequency(frequency)
 
     for var in variables:
         # eval + depth
         try:
             da0 = eval_group_or_var(ds_t, var, groups)
-            da  = _resolve_var(da0)
+            da = _resolve_var(da0)
         except Exception as e:
             _vprint(verbose, f"[animate/maps] Skip '{var}': {e}")
             continue
@@ -817,12 +944,17 @@ def animate_maps(
         # center
         center = "node" if "node" in da.dims else ("nele" if "nele" in da.dims else None)
         if center is None:
-            _vprint(verbose, f"[animate/maps] '{var}' has no 'node' or 'nele' dim; skipping.")
+            _vprint(
+                verbose,
+                f"[animate/maps] '{var}' has no 'node' or 'nele' dim; skipping.",
+            )
             continue
 
         # Build frames: list of (timestamp, instantaneous DataArray)
         if desired_list:
-            frames: List[Tuple[pd.Timestamp, xr.DataArray]] = _choose_instants(da, desired_list, method=time_method)
+            frames: List[Tuple[pd.Timestamp, xr.DataArray]] = _choose_instants(
+                da, desired_list, method=time_method
+            )
 
         elif freq_alias and "time" in da.dims:
             # sample period representatives from available timestamps, then nearest-select
@@ -843,19 +975,19 @@ def animate_maps(
                 times = np.atleast_1d(da["time"].values)
                 for i in range(len(times)):
                     sub = da.isel(time=i)
-                    ts  = pd.to_datetime(np.atleast_1d(sub["time"].values)[0])
+                    ts = pd.to_datetime(np.atleast_1d(sub["time"].values)[0])
                     frames.append((pd.Timestamp(ts), sub))
             else:
                 frames = [(pd.Timestamp("NaT"), da)]
 
         # per-var styling
-        cmap_eff    = style_get(var, styles, "cmap", cmap)
-        norm_eff    = style_get(var, styles, "norm", None)
-        vmin_style  = style_get(var, styles, "vmin", None)
-        vmax_style  = style_get(var, styles, "vmax", None)
+        cmap_eff = style_get(var, styles, "cmap", cmap)
+        norm_eff = style_get(var, styles, "norm", None)
+        vmin_style = style_get(var, styles, "vmin", None)
+        vmax_style = style_get(var, styles, "vmax", None)
         shading_eff = style_get(var, styles, "shading", shading)
 
-        for (scope_kind, region_name, spec) in scope_items:
+        for scope_kind, region_name, spec in scope_items:
             mask_nodes, mask_elems = _mask_for_region(scope_kind, region_name, spec)
 
             # color limits: norm > (vmin/vmax via styles) > clim arg > robust across selected frames
@@ -874,7 +1006,7 @@ def animate_maps(
                     clim_eff = clim
                 else:
                     vals_accum: List[float] = []
-                    for (_ts, sub) in frames:
+                    for _ts, sub in frames:
                         arr = np.asarray(sub.values).ravel()
                         vin = _masked(arr)
                         vin = vin[np.isfinite(vin)]
@@ -882,7 +1014,10 @@ def animate_maps(
                             vals_accum.append(np.nanpercentile(vin, robust_q[0]))
                             vals_accum.append(np.nanpercentile(vin, robust_q[1]))
                     if len(vals_accum) >= 2:
-                        clim_eff = (float(np.nanmin(vals_accum)), float(np.nanmax(vals_accum)))
+                        clim_eff = (
+                            float(np.nanmin(vals_accum)),
+                            float(np.nanmax(vals_accum)),
+                        )
                     else:
                         clim_eff = (0.0, 1.0)
 
@@ -891,16 +1026,19 @@ def animate_maps(
             mesh_handle = [None]
             if grid_on:
                 ax.triplot(tri, color="k", lw=0.3, alpha=0.4, zorder=3)
-            ax.set_xlabel("Longitude"); ax.set_ylabel("Latitude")
+            ax.set_xlabel("Longitude")
+            ax.set_ylabel("Latitude")
 
             def _vals(sub: xr.DataArray) -> np.ndarray:
                 arr = np.asarray(sub.values).ravel().astype(float)
                 if center == "node":
                     if mask_nodes is not None:
-                        arr = arr.copy(); arr[~mask_nodes] = np.nan
+                        arr = arr.copy()
+                        arr[~mask_nodes] = np.nan
                 else:
                     if mask_elems is not None:
-                        arr = arr.copy(); arr[~mask_elems] = np.nan
+                        arr = arr.copy()
+                        arr[~mask_elems] = np.nan
                 return arr
 
             def _draw(ts: pd.Timestamp, sub: xr.DataArray):
@@ -911,11 +1049,21 @@ def animate_maps(
                     except Exception:
                         pass
                 if center == "node":
-                    tpc = ax.tripcolor(tri, np.ma.masked_invalid(vals),
-                                       shading=shading_eff, cmap=cmap_eff, norm=norm_eff)
+                    tpc = ax.tripcolor(
+                        tri,
+                        np.ma.masked_invalid(vals),
+                        shading=shading_eff,
+                        cmap=cmap_eff,
+                        norm=norm_eff,
+                    )
                 else:
-                    tpc = ax.tripcolor(tri, np.ma.masked_invalid(vals),
-                                       shading="flat", cmap=cmap_eff, norm=norm_eff)
+                    tpc = ax.tripcolor(
+                        tri,
+                        np.ma.masked_invalid(vals),
+                        shading="flat",
+                        cmap=cmap_eff,
+                        norm=norm_eff,
+                    )
                 if clim_eff is not None and norm_eff is None:
                     tpc.set_clim(*clim_eff)
                 mesh_handle[0] = tpc
@@ -937,11 +1085,13 @@ def animate_maps(
                 ts, sub = frames[i]
                 return _draw(ts, sub)
 
-            ani = animation.FuncAnimation(fig, update, frames=len(frames), interval=interval_ms, blit=False)
+            ani = animation.FuncAnimation(
+                fig, update, frames=len(frames), interval=interval_ms, blit=False
+            )
 
             # filename
             scope_str = "Domain" if scope_kind == "domain" else f"Region-{region_name}"
-            freq_tag  = f"__Freq{frequency.capitalize()}" if _normalize_frequency(frequency) else ""
+            freq_tag = f"__Freq{frequency.capitalize()}" if _normalize_frequency(frequency) else ""
             fname = f"{prefix}__Map-{scope_str}__{var}__{dtag}__{tlabel}{freq_tag}__Anim.gif"
             path = os.path.join(outdir, fname)
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -951,4 +1101,3 @@ def animate_maps(
             _vprint(verbose, f"[animate/maps] saved: {path}")
 
     return outputs
-

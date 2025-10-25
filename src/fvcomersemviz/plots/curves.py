@@ -20,6 +20,7 @@ __all__ = ["build_curve_data", "plot_curves"]
 # Tolerant resolution helpers (variables / groups / expressions)
 # ---------------------------------------------------------------------
 
+
 def _normalize_key(s: str) -> str:
     """Casefold and strip underscores/dashes/spaces to ease matching."""
     return "".join(ch for ch in s.casefold() if ch not in "_- ")
@@ -78,6 +79,7 @@ def _eval_any(
 # Binning helper
 # ---------------------------------------------------------------------
 
+
 def _bin_xy(
     x: np.ndarray,
     y: np.ndarray,
@@ -92,16 +94,18 @@ def _bin_xy(
     Returns dict with x_mid, y_val, y_lo, y_hi, n (per-bin counts).
     """
     m = np.isfinite(x) & np.isfinite(y)
-    x = x[m]; y = y[m]
+    x = x[m]
+    y = y[m]
     if x.size == 0:
         z = np.array([])
         return dict(x_mid=z, y_val=z, y_lo=z, y_hi=z, n=z)
 
-    xmin = np.nanmin(x); xmax = np.nanmax(x)
+    xmin = np.nanmin(x)
+    xmax = np.nanmax(x)
     if xmin == xmax:
         # Degenerate: single bin with all y
         val = np.nanmedian(y) if agg == "median" else np.nanmean(y)
-        lo, hi = (np.nanpercentile(y, [25, 75]) if iqr else (np.nan, np.nan))
+        lo, hi = np.nanpercentile(y, [25, 75]) if iqr else (np.nan, np.nan)
         return dict(
             x_mid=np.asarray([xmin]),
             y_val=np.asarray([val]),
@@ -111,17 +115,17 @@ def _bin_xy(
         )
 
     edges = np.linspace(xmin, xmax, n_bins + 1)
-    mids  = 0.5 * (edges[:-1] + edges[1:])
-    idx   = np.clip(np.searchsorted(edges, x, side="right") - 1, 0, n_bins - 1)
+    mids = 0.5 * (edges[:-1] + edges[1:])
+    idx = np.clip(np.searchsorted(edges, x, side="right") - 1, 0, n_bins - 1)
 
     y_val = np.full(n_bins, np.nan)
-    y_lo  = np.full(n_bins, np.nan)
-    y_hi  = np.full(n_bins, np.nan)
-    n     = np.zeros(n_bins, dtype=int)
+    y_lo = np.full(n_bins, np.nan)
+    y_hi = np.full(n_bins, np.nan)
+    n = np.zeros(n_bins, dtype=int)
 
     for b in range(n_bins):
-        sel = (idx == b)
-        nb  = int(sel.sum())
+        sel = idx == b
+        nb = int(sel.sum())
         n[b] = nb
         if nb < min_count:
             continue
@@ -148,6 +152,7 @@ def _bin_xy(
 # ---------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------
+
 
 def build_curve_data(
     ds: xr.Dataset,
@@ -263,7 +268,8 @@ def build_curve_data(
     if "bin" in spec and spec["bin"]:
         cfg = spec["bin"]
         out = _bin_xy(
-            x, y,
+            x,
+            y,
             n_bins=int(cfg.get("x_bins", 40)),
             agg=str(cfg.get("agg", "median")),
             min_count=int(cfg.get("min_count", 10)),
@@ -272,9 +278,11 @@ def build_curve_data(
         return dict(kind="binned", data=out, style=style)
     else:
         scfg = spec.get("scatter", {})
-        return dict(kind="scatter",
-                    data=dict(x=x, y=y, s=scfg.get("s", 4), alpha=scfg.get("alpha", 0.15)),
-                    style=style)
+        return dict(
+            kind="scatter",
+            data=dict(x=x, y=y, s=scfg.get("s", 4), alpha=scfg.get("alpha", 0.15)),
+            style=style,
+        )
 
 
 def plot_curves(
@@ -292,7 +300,9 @@ def plot_curves(
     # figure + saving
     base_dir: str,
     figures_root: str,
-    stem: Optional[str] = None,      # optional override; otherwise auto-built with scope/depth/time tags
+    stem: Optional[
+        str
+    ] = None,  # optional override; otherwise auto-built with scope/depth/time tags
     dpi: int = 150,
     figsize: Tuple[float, float] = (7.2, 4.6),
     constrained_layout: bool = True,
@@ -404,31 +414,43 @@ def plot_curves(
 
     # color cycle
     cycle = plt.rcParams.get("axes.prop_cycle", None)
-    colors = (cycle.by_key().get("color", [f"C{i}" for i in range(10)] )
-              if cycle is not None else [f"C{i}" for i in range(10)])
+    colors = (
+        cycle.by_key().get("color", [f"C{i}" for i in range(10)])
+        if cycle is not None
+        else [f"C{i}" for i in range(10)]
+    )
 
     handles: List[Any] = []
-    labels:  List[str] = []
+    labels: List[str] = []
 
     for i, spec in enumerate(specs):
         res = build_curve_data(ds, spec, groups=groups, verbose=verbose)
 
         # default style, overridable by spec["style"]
-        sty = dict(color=colors[i % len(colors)], lw=2, label=spec.get("name", f"curve {i+1}"))
+        sty = dict(
+            color=colors[i % len(colors)],
+            lw=2,
+            label=spec.get("name", f"curve {i + 1}"),
+        )
         sty.update(res.get("style", {}))
-        lab = sty.pop("label", spec.get("name", f"curve {i+1}"))
+        lab = sty.pop("label", spec.get("name", f"curve {i + 1}"))
 
         if res["kind"] == "binned":
             d = res["data"]
-            have_band = ("y_lo" in d and "y_hi" in d and np.isfinite(d["y_lo"]).any())
+            have_band = "y_lo" in d and "y_hi" in d and np.isfinite(d["y_lo"]).any()
             if have_band:
-                ax.fill_between(d["x_mid"], d["y_lo"], d["y_hi"],
-                                color=sty.get("color", None), alpha=0.15, linewidth=0)
+                ax.fill_between(
+                    d["x_mid"],
+                    d["y_lo"],
+                    d["y_hi"],
+                    color=sty.get("color", None),
+                    alpha=0.15,
+                    linewidth=0,
+                )
             h = ax.plot(d["x_mid"], d["y_val"], **sty)[0]
         else:
             d = res["data"]
-            h = ax.scatter(d["x"], d["y"], s=d["s"], alpha=d["alpha"],
-                           color=sty.get("color", None))
+            h = ax.scatter(d["x"], d["y"], s=d["s"], alpha=d["alpha"], color=sty.get("color", None))
 
         handles.append(h)
         labels.append(lab)
@@ -446,8 +468,15 @@ def plot_curves(
     # legend
     if show_legend and handles:
         if legend_outside:
-            ax.legend(handles, labels, loc="upper left", bbox_to_anchor=(1.02, 1.0),
-                      borderaxespad=0.0, frameon=False, fontsize=legend_fontsize)
+            ax.legend(
+                handles,
+                labels,
+                loc="upper left",
+                bbox_to_anchor=(1.02, 1.0),
+                borderaxespad=0.0,
+                frameon=False,
+                fontsize=legend_fontsize,
+            )
         else:
             ax.legend(handles, labels, loc="best", frameon=False, fontsize=legend_fontsize)
 
@@ -468,15 +497,16 @@ def plot_curves(
     if stem is None:
         scope_tags = [_scope_tag(s) for s in specs] if specs else ["Domain"]
         depth_tags = [_depth_tag_from_spec(s) for s in specs] if specs else ["AllDepth"]
-        time_labels= [_time_label_from_spec(s) for s in specs] if specs else ["AllTime"]
+        time_labels = [_time_label_from_spec(s) for s in specs] if specs else ["AllTime"]
 
         scope_tag_final = scope_tags[0] if _all_equal(scope_tags) else "MultiScope"
         depth_tag_final = depth_tags[0] if _all_equal(depth_tags) else "MixedDepth"
-        time_label_final= time_labels[0] if _all_equal(time_labels) else "MixedTime"
+        time_label_final = time_labels[0] if _all_equal(time_labels) else "MixedTime"
 
         content_bits: List[str] = []
         if specs:
-            xk = specs[0].get("x"); yk = specs[0].get("y")
+            xk = specs[0].get("x")
+            yk = specs[0].get("y")
             if xk and yk:
                 content_bits.append(f"{xk}_vs_{yk}")
         if len(specs) > 1:

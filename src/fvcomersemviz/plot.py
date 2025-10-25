@@ -1,5 +1,4 @@
 # fvcomersemviz/plot.py
-from __future__ import annotations
 
 """
 Console + plotting helpers for demos/runners.
@@ -16,19 +15,22 @@ This module centralizes:
 Keep these functions generic so any example script can reuse them.
 """
 
+from __future__ import annotations
 from typing import Any, Dict, List, Sequence, Tuple
 import os
 import glob
 import textwrap
-
+import numpy as np
 import pandas as pd
 import xarray as xr
 import inspect
 import contextlib
+import matplotlib.pyplot as plt
 
 # Optional imports are local (only for nicer UX); module works without them.
 try:
     import dask  # type: ignore  # noqa: F401
+
     _HAS_DASK = True
 except Exception:
     _HAS_DASK = False
@@ -76,6 +78,7 @@ def try_register_progress_bar(show: bool = True) -> None:
         return
     try:
         from dask.diagnostics import ProgressBar  # type: ignore
+
         ProgressBar().register()
         bullet("Dask progress bar: enabled")
     except Exception as e:
@@ -110,6 +113,7 @@ def summarize_files(files: List[str]) -> None:
 # plotting wrapper
 # ---------------------------
 
+
 def plot_call(fn, *, verbose: bool = False, **kwargs):
     """
     Call a plotting function.
@@ -121,12 +125,12 @@ def plot_call(fn, *, verbose: bool = False, **kwargs):
       - If the target function has a `verbose` kwarg, we pass this same value.
         If it doesn't, we just silence/allow prints as requested.
     """
-    has_verbose = 'verbose' in inspect.signature(fn).parameters
+    has_verbose = "verbose" in inspect.signature(fn).parameters
     if has_verbose:
-        kwargs['verbose'] = verbose
+        kwargs["verbose"] = verbose
     else:
         # don't accidentally pass an unknown kwarg
-        kwargs.pop('verbose', None)
+        kwargs.pop("verbose", None)
 
     if verbose:
         # Show prints
@@ -134,7 +138,7 @@ def plot_call(fn, *, verbose: bool = False, **kwargs):
 
     # Suppress prints from inside fn (stdout + stderr)
     with contextlib.ExitStack() as stack:
-        with open(os.devnull, 'w') as devnull:
+        with open(os.devnull, "w") as devnull:
             stack.enter_context(contextlib.redirect_stdout(devnull))
             stack.enter_context(contextlib.redirect_stderr(devnull))
             return fn(**kwargs)
@@ -146,7 +150,21 @@ def plot_call(fn, *, verbose: bool = False, **kwargs):
 def print_dataset_summary(ds: xr.Dataset) -> None:
     """Print core info: dims/coords/time coverage and presence of key vars."""
     kv("Dimensions", dict(ds.sizes))
-    present_coords = [c for c in ["time", "lon", "lat", "lonc", "latc", "siglay", "siglev", "nele", "node"] if c in ds]
+    present_coords = [
+        c
+        for c in [
+            "time",
+            "lon",
+            "lat",
+            "lonc",
+            "latc",
+            "siglay",
+            "siglev",
+            "nele",
+            "node",
+        ]
+        if c in ds
+    ]
     kv("Key coords", present_coords)
     for c in ["art1", "Itime", "Itime2", "nv"]:
         kv(f"Has '{c}'", c in ds)
@@ -155,8 +173,8 @@ def print_dataset_summary(ds: xr.Dataset) -> None:
         try:
             t = pd.to_datetime(ds["time"].values)
             kv("Time start", str(pd.Timestamp(t[0])))
-            kv("Time end",   str(pd.Timestamp(t[-1])))
-            kv("Timesteps",  t.size)
+            kv("Time end", str(pd.Timestamp(t[-1])))
+            kv("Timesteps", t.size)
         except Exception as e:
             kv("Time coverage", f"unavailable ({e})")
     else:
@@ -188,6 +206,7 @@ def sample_output_listing(fig_folder: str, prefix: str) -> None:
     if len(files) > 5:
         bullet("…")
 
+
 def stacked_fraction_bar(
     ax,
     fractions,
@@ -200,7 +219,7 @@ def stacked_fraction_bar(
     legend_loc: str = "upper right",
     legend_fontsize: int = 8,
     annotate: bool = False,
-    annotate_min: float = 0.03,      # annotate segments ≥ 3%
+    annotate_min: float = 0.03,  # annotate segments ≥ 3%
     annotate_fmt: str = "{:.1f}%",
     clip_to_1: bool = True,
 ):
@@ -240,7 +259,6 @@ def stacked_fraction_bar(
     -------
     None
     """
-    import numpy as np
 
     f = np.asarray(list(fractions), dtype=float)
     f[~np.isfinite(f)] = 0.0
@@ -259,8 +277,13 @@ def stacked_fraction_bar(
         if annotate and h >= annotate_min:
             pct_txt = annotate_fmt.format(h * 100.0)
             ax.text(
-                x[0], bottom + h / 2.0, pct_txt,
-                ha="center", va="center", fontsize=8, color="black"
+                x[0],
+                bottom + h / 2.0,
+                pct_txt,
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="black",
             )
         bottom += h
 
@@ -291,18 +314,18 @@ def stacked_fraction_bars(
     labels_per_bar: list[Sequence[str]],
     *,
     bar_names: list[str],
-    colors: list[str] | None = None,          # optional palette list; used if provided
+    colors: list[str] | None = None,  # optional palette list; used if provided
     y_label: str = "Fraction",
     show_legend: bool = True,
     legend_loc: str = "upper right",
     legend_fontsize: int = 8,
-    legend_outside: bool = True,              # NEW: place legend outside to avoid overlap
+    legend_outside: bool = True,  # NEW: place legend outside to avoid overlap
     annotate: bool = False,
-    annotate_min: float = 0.03,               # annotate segments ≥ 3%
+    annotate_min: float = 0.03,  # annotate segments ≥ 3%
     annotate_fmt: str = "{:.1f}%",
     clip_to_1: bool = True,
     xtick_rotation: float = 45.0,
-    bar_width: float = 0.3,                  # thinner bars by default
+    bar_width: float = 0.3,  # thinner bars by default
 ) -> None:
     """
     Draw multiple stacked bars on a single axes with consistent colors per label.
@@ -312,8 +335,6 @@ def stacked_fraction_bars(
     bar_names      : x tick labels for each bar
     legend_outside : if True, dock legend outside the right edge to avoid overlap
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     n = len(bars)
     if not (len(labels_per_bar) == n and len(bar_names) == n):
@@ -355,8 +376,15 @@ def stacked_fraction_bars(
             if lab not in handles:
                 handles[lab] = rects[0]  # one handle per label for legend
             if annotate and h >= annotate_min:
-                ax.text(x[i], bottom + h / 2.0, annotate_fmt.format(h * 100.0),
-                        ha="center", va="center", fontsize=8, color="black")
+                ax.text(
+                    x[i],
+                    bottom + h / 2.0,
+                    annotate_fmt.format(h * 100.0),
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="black",
+                )
             bottom += h
 
     # Axis cosmetics
@@ -392,15 +420,18 @@ def stacked_fraction_bars(
                 frameon=False,
             )
 
+
 __all__ = [
-    "hr", "info", "bullet", "kv",
+    "hr",
+    "info",
+    "bullet",
+    "kv",
     "try_register_progress_bar",
-    "list_files", "summarize_files",
-    "safe_plot_call",
+    "list_files",
+    "summarize_files",
     "print_dataset_summary",
     "ensure_paths_exist",
     "sample_output_listing",
     "stacked_fraction_bar",
     "stacked_fraction_bars",
 ]
-
