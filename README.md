@@ -26,15 +26,6 @@ Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reprodu
   `scipy`, `notebook`
 * Geospatial (for region masks/overlays): `geopandas`, `shapely`, `pyproj`, `rtree` *(optional but recommended)*
 * Optional performance: `dask[array]`
-
----
-Here’s a clean, copy-paste **README** install section that covers:
-
-* User install (with `environment.yml`, env name `fviz`)
-* Developer install (with `environment-dev.yml`, env name `fviz-dev`)
-* Manual install (explicit package list without YAML)
-* Quick verification and cleanup
-
 ---
 
 ## Installation
