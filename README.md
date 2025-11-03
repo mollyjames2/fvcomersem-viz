@@ -253,17 +253,6 @@ fvcomersem-viz/
 
 ---
 
-## Tips & troubleshooting
-
-* **Large files:** avoid committing files >100 MB (GitHub blocks them). Use `.gitignore` for generated figures/data; consider **Git LFS** for large artifacts.
-* **Notebooks:** clear outputs before committing:
-
-  ```bash
-  jupyter nbconvert --clear-output --inplace notebooks/*.ipynb
-  ```
-* **Performance:** open datasets with Dask chunks for large runs.
-
----
 
 ## Contributing
 
@@ -316,30 +305,6 @@ After review and merge, your branch will be deleted automatically.
 See the full Contributing Guide (CONTRIBUTING.md) and Releasing Guide (RELEASING.md)
 for details on branching, review, and release workflows.
 
-
-### Maintainer note
-
-The fvcomersem-viz package follows a simple branching and release workflow:
-
-- Development work happens on the dev branch.
-- Stable releases live on the main branch.
-- Version numbers come automatically from git tags (using setuptools-scm).
-- When a tag starting with v is pushed to main (for example v1.0.0),
-  a GitHub Action builds the package and publishes it to PyPI.
-
-This means that regular development commits on dev are not published until they are
-merged into main and tagged as a release. Each tag on main creates a new version on
-PyPI that users can install with:
-
-    pip install fvcomersem-viz
-
-Small bug fixes may be applied directly to main as a hotfix and tagged as a patch
-release (for example v1.0.1). Larger changes and new features are developed and tested
-on dev before being merged and released.
-
-For more details on releases and versioning, see RELEASING.md.
-
-Issues and pull requests are welcome. For development, use `pip install -e .`, run `python tests/check_install.py`, and follow standard Git practices (feature branches + PRs).
 
 ---
 
