@@ -49,11 +49,12 @@ RECOMMENDED_ENV: Sequence[Tuple[str, str, Sequence[str]]] = (
     ("geopandas", "geopandas", ()),
     ("Shapely", "shapely", ("shapely",)),  # metadata dist may be "Shapely"
     ("pyproj", "pyproj", ()),
-    ("Rtree", "rtree", ("rtree",)),        # metadata dist may be "Rtree"
+    ("Rtree", "rtree", ("rtree",)),  # metadata dist may be "Rtree"
 )
 
 
 # --------------------------- Data Model ------------------------------ #
+
 
 @dataclass
 class CheckResult:
@@ -64,6 +65,7 @@ class CheckResult:
 
 
 # --------------------------- Helper Functions ------------------------ #
+
 
 def _print(msg: str, *, verbose: bool = True):
     if verbose:
@@ -133,6 +135,7 @@ def distribution_any(candidates: List[str]):
 _REQ_NAME = re.compile(r"^\s*([A-Za-z0-9_.\-]+)")
 _EXTRA_MARKER = re.compile(r";\s*extra\s*==", re.IGNORECASE)
 
+
 def parse_requirements(requires_dist: Optional[List[str]]) -> List[str]:
     """
     Return only runtime requirements (exclude optional extras like dev/test).
@@ -183,6 +186,7 @@ def summarize_and_exit(results: List[CheckResult]) -> None:
 
 # --------------------------- Main Logic ------------------------------ #
 
+
 def main(argv: Optional[List[str]] = None) -> int:
     import argparse
 
@@ -208,7 +212,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     version_attr = getattr(mod, "__version__", None)
-    results.append(CheckResult("Import fvcomersemviz", ok=True, detail=f"Module '{used_mod}' loaded"))
+    results.append(
+        CheckResult("Import fvcomersemviz", ok=True, detail=f"Module '{used_mod}' loaded")
+    )
     if version_attr:
         _print(f"[OK] fvcomersemviz.__version__ = {version_attr}", verbose=True)
     else:
@@ -224,12 +230,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     this_version = version_of(dist_name) or dist.metadata.get("Version", "unknown")
-    _print(f"[OK] Distribution: {dist.metadata.get('Name', dist_name)} {this_version}", verbose=True)
-    results.append(CheckResult("Distribution located", ok=True, detail=f"{dist_name} {this_version}"))
+    _print(
+        f"[OK] Distribution: {dist.metadata.get('Name', dist_name)} {this_version}", verbose=True
+    )
+    results.append(
+        CheckResult("Distribution located", ok=True, detail=f"{dist_name} {this_version}")
+    )
 
     reqs = parse_requirements(dist.requires or [])
     if reqs:
-        _print(f"[INFO] Declared runtime dependencies ({len(reqs)}): {', '.join(reqs)}", verbose=True)
+        _print(
+            f"[INFO] Declared runtime dependencies ({len(reqs)}): {', '.join(reqs)}", verbose=True
+        )
         dep_failures: List[str] = []
         dep_warnings: List[str] = []
         for dep in reqs:
@@ -242,24 +254,40 @@ def main(argv: Optional[List[str]] = None) -> int:
                 try:
                     importlib.import_module(dep.replace("-", "_"))
                 except Exception as e:
-                    dep_warnings.append(f"{dep}: installed but import failed ({e.__class__.__name__})")
-                    _print(f"[WARN] {dep}: installed but could not import top-level module.", verbose=True)
+                    dep_warnings.append(
+                        f"{dep}: installed but import failed ({e.__class__.__name__})"
+                    )
+                    _print(
+                        f"[WARN] {dep}: installed but could not import top-level module.",
+                        verbose=True,
+                    )
 
-        results.append(CheckResult(
-            "Dependencies installed",
-            ok=(len(dep_failures) == 0),
-            detail="All dependencies present" if not dep_failures else "; ".join(dep_failures),
-        ))
-        results.append(CheckResult(
-            "Dependency imports",
-            ok=True,
-            warn=(len(dep_warnings) > 0),
-            detail="All dependency imports succeeded" if not dep_warnings else "; ".join(dep_warnings),
-        ))
+        results.append(
+            CheckResult(
+                "Dependencies installed",
+                ok=(len(dep_failures) == 0),
+                detail="All dependencies present" if not dep_failures else "; ".join(dep_failures),
+            )
+        )
+        results.append(
+            CheckResult(
+                "Dependency imports",
+                ok=True,
+                warn=(len(dep_warnings) > 0),
+                detail="All dependency imports succeeded"
+                if not dep_warnings
+                else "; ".join(dep_warnings),
+            )
+        )
     else:
         # No runtime deps declared; treat as managed via environment (conda).
-        _print("[INFO] Runtime dependencies declared in package metadata: none (using environment packages check below).", verbose=True)
-        results.append(CheckResult("Dependencies installed", ok=True, detail="Managed via environment"))
+        _print(
+            "[INFO] Runtime dependencies declared in package metadata: none (using environment packages check below).",
+            verbose=True,
+        )
+        results.append(
+            CheckResult("Dependencies installed", ok=True, detail="Managed via environment")
+        )
         results.append(CheckResult("Dependency imports", ok=True, detail="Managed via environment"))
 
     # 4) Recommended environment packages (conda stack) - warn-only
@@ -287,19 +315,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             missing_env.append(dist_name)
 
     if detected_env:
-        results.append(CheckResult(
-            "Environment packages (recommended)",
-            ok=True,
-            detail="Detected: " + ", ".join(detected_env),
-            warn=bool(missing_env),
-        ))
+        results.append(
+            CheckResult(
+                "Environment packages (recommended)",
+                ok=True,
+                detail="Detected: " + ", ".join(detected_env),
+                warn=bool(missing_env),
+            )
+        )
     if missing_env:
-        results.append(CheckResult(
-            "Environment packages missing (recommended)",
-            ok=True,  # warn-only for users
-            detail=", ".join(missing_env),
-            warn=True,
-        ))
+        results.append(
+            CheckResult(
+                "Environment packages missing (recommended)",
+                ok=True,  # warn-only for users
+                detail=", ".join(missing_env),
+                warn=True,
+            )
+        )
 
     # 5) Basic smoke test
     try:
@@ -324,4 +356,3 @@ if __name__ == "__main__":
     except Exception:
         print("Unexpected error:\n" + traceback.format_exc())
         sys.exit(1)
-

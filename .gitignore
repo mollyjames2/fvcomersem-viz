@@ -13,9 +13,10 @@ dist/
 # Ignore NFS temporary files
 **/.nfs*
 src/fvcomersemviz/_version.py
-
+figures/
 # build artifacts
 /dist/
 /build/
 /*.egg-info
 /src/*.egg-info
+data/bubbles/*.dat

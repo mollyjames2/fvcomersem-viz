@@ -1,39 +1,45 @@
 [![Build and test](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/build-test.yml/badge.svg)](https://github.com/mollyjames2/fvcomersem-viz/actions/workflows/build-test.yml)
 # fvcomersem-viz
 
-Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reproducible figures and animations: time-series, plan-view maps, Hovmöller sections, x–y “curves” diagnostics, stoichiometry KDEs, and more.
+Utilities for turning **FVCOM / FVCOM–ERSEM** model output into clear, reproducible figures and animations:  
+time-series, plan-view maps, Hovmöller sections, x–y diagnostics, stoichiometry KDEs, and 3D cinematic bubble plumes.
 
 ---
+
+##  Overview
+
+`fvcomersem-viz` helps modellers and marine scientists quickly visualise and diagnose FVCOM–ERSEM runs with consistent, publication-ready plots.  
+
+It now includes a **Cinematic 3D Bubble Renderer** — powered by PyVista (VTK) — for visualising subsea gas leaks or bubble plumes as dynamic, shaded sphere animations.
+
+-
 
 ## Features
 
 * **Time-series** at domain / region / station scopes (surface, bottom, depth-avg, sigma, fixed-z).
 * **Plan-view maps** (full domain or polygon-masked regions).
 * **Hovmöller** (time × depth) in native σ or interpolated z.
-* **Composition** (time × depth) phyto and zoo - surface/bottom comparisons,
-  depth averged or specific depth.
-* **Curves (x–y diagnostics)** with binned median±IQR or raw scatter.
-* **Stoichiometry KDEs** (N:C & P:C vs variable) in a 2×2 panel.
-* **Animations** for time-series and maps.
-* Sensible **file naming** & directories for batch runs; Dask-friendly.
+* **Composition** (time × depth) for phyto/zoo stoichiometry.
+* **Curves (x–y diagnostics)** with binned median ± IQR or raw scatter.
+* **Stoichiometry KDEs** (N:C & P:C vs variable) in 2×2 panels.
+* **Animations** for time-series, maps, and 3D bubbles.
+* **Cinematic 3D bubble plumes** using PyVista/VTK with lighting, fog, and orbiting camera.
+* Sensible **file naming** & directory structure; Dask-friendly.
 
 ---
 
 ## Requirements
 
-* **Python** ≥ 3.9 (3.11 recommended)
-* Core: `numpy`, `pandas`, `xarray`, `matplotlib`, `netCDF4`, `cftime`,
-  `scipy`, `notebook`
-* Geospatial (for region masks/overlays): `geopandas`, `shapely`, `pyproj`, `rtree` *(optional but recommended)*
-* Optional performance: `dask[array]`
+| Category | Packages | Notes |
+|-----------|-----------|-------|
+| **Core (required)** | `numpy`, `pandas`, `xarray`, `matplotlib`, `netCDF4`, `cftime`, `scipy`, `notebook`, `ffmpeg` | Base numerical + plotting stack. |
+| **Geospatial (optional)** | `geopandas`, `shapely`, `pyproj`, `rtree`, `cartopy` | For regional masks and map overlays. |
+| **Performance (optional)** | `dask[array]` | Parallel/distributed arrays. |
+| **3D Visualisation (optional)** | `pyvista`, `pyvistaqt`, `vtk`, `imageio-ffmpeg` | Enables `plot_bubbles_pyvista` (GPU-rendered 3D plumes). |
+| **Development (optional)** | `pytest`, `ruff`, `black`, `pre-commit`, `mypy` | Included automatically in the dev environment. |
 
----
-Here’s a clean, copy-paste **README** install section that covers:
+*Python ≥ 3.9 (3.11 recommended)*
 
-* User install (with `environment.yml`, env name `fviz`)
-* Developer install (with `environment-dev.yml`, env name `fviz-dev`)
-* Manual install (explicit package list without YAML)
-* Quick verification and cleanup
 
 ---
 
@@ -101,8 +107,9 @@ Create and activate the env:
 mamba create -n fviz -c conda-forge \
   python=3.11 \
   numpy scipy pandas xarray dask netcdf4 \
-  matplotlib notebook \
-  geopandas shapely pyproj rtree cartopy pip
+  matplotlib notebook ffmpeg \
+  geopandas shapely pyproj rtree cartopy \
+  pyvista pyvistaqt vtk imageio-ffmpeg pip
 mamba activate fviz
 ```
 
@@ -190,6 +197,7 @@ fvcomersem-viz/
 │     ├─ curves.py
 │     ├─ composition.py
 │     ├─ kde_stoichiometry.py
+│     ├─ bubbles.py
 │     └─ animate.py
 ├─ examples/
 │  ├─ tutorial.py
@@ -199,6 +207,7 @@ fvcomersem-viz/
 │  ├─ plot_hovmoller.py
 │  ├─ plot_curves.py
 │  ├─ plot_composition.py
+│  ├─ plot_bubbles.py
 │  └─ plot_animations.py
 ├─ notebooks/
 │  ├─ quickstart_tutorial.ipynb
