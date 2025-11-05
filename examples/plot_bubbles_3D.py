@@ -59,6 +59,7 @@ def main() -> None:
             color_by="size", 
             size_color_scale="linear",     # "log", "gamma", "linear"
             size_gamma=0.5,             # only for gamma mode       
+            output_root=output_root,
         )
 
 
