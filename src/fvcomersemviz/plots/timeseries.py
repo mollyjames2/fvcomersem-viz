@@ -1,5 +1,6 @@
 # plots/timeseries.py
 from __future__ import annotations
+
 from typing import List, Tuple, Dict, Any, Optional
 import os
 import numpy as np
@@ -99,13 +100,14 @@ def _time_index(da: xr.DataArray) -> pd.DatetimeIndex:
 
 
 def _space_dims(da: xr.DataArray) -> list:
+    # Space dims excluding time and vertical
     return [d for d in da.dims if d not in ("time", "siglay")]
 
 
 def _align_art1_to_da(
     ds: xr.Dataset, da: xr.DataArray, verbose: bool = False
 ) -> Optional[xr.DataArray]:
-    """Return area weights aligned to the *current* data selection, or None if unsuitable."""
+    """Return area weights aligned to the current data selection, or None if unsuitable."""
     if "art1" not in ds:
         return None
     w = ds["art1"]
@@ -140,7 +142,7 @@ def domain_mean_timeseries(
     ds: xr.Dataset,
     variables: List[str],
     *,
-    depth: Any = "surface",  # ← default to surface
+    depth: Any = "surface",  # default to surface
     months: Optional[List[int]] = None,
     years: Optional[List[int]] = None,
     start_date: Optional[str] = None,
@@ -154,24 +156,17 @@ def domain_mean_timeseries(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
     combine_by: Optional[str] = None,  # None | "var"
+    show_std: bool = False,
+    std_alpha: float = 0.25,
 ) -> None:
     """
     Plot domain-mean time series for one or more variables, with optional depth selection
     and time filtering. Writes one or multiple PNGs depending on `combine_by`.
 
-    Workflow
-    --------
-    1) Time filter: `filter_time(...)` using months/years/date bounds.
-    2) For each `var`, resolve + depth-handle via `resolve_da_with_depth(...)`.
-       - If `var` has 'siglay', depth selection / abs-z is applied.
-       - If `var` is 2-D (time×node/nele), it is auto-lifted to a single 'siglay' layer.
-    3) Compute spatial mean over domain using `_space_mean(da, ds, ...)`.
-    4) Save per-variable figures, or a combined figure if `combine_by="var"`.
-
     Notes
     -----
-    - Variables without a 'time' dimension are skipped.
-    - 2-D variables like `aice(time,node)` are supported transparently.
+    - If show_std=True, plots mean +/- 1 std as a shaded band.
+    - Robust to singleton dims returned by reductions (squeezes/reshapes to 1D).
     """
     if combine_by not in (None, "var"):
         raise ValueError("domain_mean_timeseries: combine_by must be None or 'var'.")
@@ -184,37 +179,61 @@ def domain_mean_timeseries(
     _vprint(verbose, "[domain] Start domain mean time series")
     _vprint(verbose, f"[domain] Depth={depth} -> tag='{tag}' | Time window='{label}'")
 
-    #  time filter once up front (works for both 2-D and 3-D vars)
     ds_t = filter_time(ds, months, years, start_date, end_date)
 
-    # collect series (so we can optionally combine into one plot)
-    series: List[Tuple[str, pd.DatetimeIndex, np.ndarray]] = []
+    # (var, tindex, mean_1d, std_1d)
+    series: List[Tuple[str, pd.DatetimeIndex, np.ndarray, np.ndarray]] = []
     for var in variables:
-        _vprint(verbose, f"[domain] Variable '{var}': resolving with depth handling…")
+        _vprint(verbose, f"[domain] Variable '{var}': resolving with depth handling...")
         try:
-            # ← unified resolver: handles 'surface'/'bottom'/abs-z AND 2-D fields
             da = resolve_da_with_depth(ds_t, var, depth=depth, groups=groups, verbose=verbose)
         except Exception as e:
             _vprint(verbose, f"[domain] Skipping '{var}': {e}")
             continue
 
-        m = _space_mean(da, ds, verbose=verbose)
-        if "time" not in m.dims:
+        if "time" not in da.dims:
             _vprint(verbose, f"[domain] '{var}' has no 'time' dimension; skipping.")
             continue
-        series.append((var, _time_index(m), m.values))
+
+        sdims = _space_dims(da)
+        w = _align_art1_to_da(ds, da, verbose=verbose)
+        mean, std = weighted_mean_std(da, sdims, w)
+
+        if "time" not in mean.dims:
+            _vprint(verbose, f"[domain] '{var}' has no 'time' after reduction; skipping.")
+            continue
+
+        tidx = _time_index(mean)
+
+        y = np.asarray(mean.values).squeeze().reshape(-1)
+        s = np.asarray(std.values).squeeze().reshape(-1)
+
+        if y.shape[0] != len(tidx):
+            raise ValueError(
+                f"[domain] '{var}': time len={len(tidx)} but mean shape={y.shape} "
+                "after squeeze/reshape. Check reduction dims."
+            )
+        if s.shape[0] != len(tidx):
+            raise ValueError(
+                f"[domain] '{var}': time len={len(tidx)} but std shape={s.shape} "
+                "after squeeze/reshape. Check reduction dims."
+            )
+
+        series.append((var, tidx, y, s))
 
     if not series:
         _vprint(verbose, "[domain] nothing to plot.")
         return
 
-    # render
     if combine_by == "var":
         fig, ax = plt.subplots(figsize=figsize)
-        for var, t, y in series:
+        for var, t, y, s in series:
             color = style_get(var, styles, "line_color", None)
-            ax.plot(t, y, lw=linewidth, color=color, label=var)
-        ax.set_title(f"Domain — ({tag}, {label})")
+            (line,) = ax.plot(t, y, lw=linewidth, color=color, label=var, zorder=2)
+            if show_std:
+                c = line.get_color()
+                ax.fill_between(t, y - s, y + s, alpha=std_alpha, color=c, zorder=1)
+        ax.set_title(f"Domain - ({tag}, {label})")
         ax.set_xlabel("Time")
         ax.set_ylabel("Value")
         ax.legend(loc="best")
@@ -224,12 +243,14 @@ def domain_mean_timeseries(
         _vprint(verbose, f"[domain] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # default: one per variable
-    for var, t, y in series:
+    for var, t, y, s in series:
         fig, ax = plt.subplots(figsize=figsize)
         color = style_get(var, styles, "line_color", None)
-        ax.plot(t, y, lw=linewidth, color=color)
-        ax.set_title(f"{var} — Domain ({tag}, {label})")
+        (line,) = ax.plot(t, y, lw=linewidth, color=color, zorder=2)
+        if show_std:
+            c = line.get_color()
+            ax.fill_between(t, y - s, y + s, alpha=std_alpha, color=c, zorder=1)
+        ax.set_title(f"{var} - Domain ({tag}, {label})")
         ax.set_xlabel("Time")
         ax.set_ylabel(var)
         fname = f"{prefix}__Domain__{var}__{tag}__{label}__Timeseries.png"
@@ -257,68 +278,16 @@ def station_timeseries(
     dpi: int = 150,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
-    combine_by: Optional[str] = None,  # NEW: None | "var" | "station"
+    combine_by: Optional[str] = None,  # None | "var" | "station"
 ) -> None:
     """
     Plot station time series by sampling the nearest grid column at each station
     (node or element), with optional depth selection and time filtering.
 
-    Workflow
-    --------
-    1. Depth selection and time filter on `ds` to obtain `ds2`.
-    2. For each station, find nearest indices for 'node' and/or 'nele' via `nearest_index_for_dim`.
-    3. For each variable, resolve through `eval_group_or_var(ds2, var, groups)`.
-       Subset to the station location (node or element). If absolute depth was requested,
-       apply `select_da_by_z` using the spatially-aligned subset of `ds2`.
-    4. Plot lines according to `combine_by` choice and save PNGs.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Source dataset.
-    variables : list of str
-        Variable or expression names to plot.
-    stations : list of (str, float, float)
-        Station definitions as (name, lat, lon). Nearest node/element is used.
-    depth : Any
-        Depth selector: "surface", "bottom", "depth_avg", sigma value, or absolute z forms.
-    months, years : list[int], optional
-        Time filters (calendar-based).
-    start_date, end_date : str, optional
-        Inclusive date bounds as "YYYY-MM-DD".
-    base_dir : str
-        Run root for filename prefixing.
-    figures_root : str
-        Root folder for outputs.
-    groups : dict, optional
-        Alias/expression map used by `eval_group_or_var`.
-    linewidth : float, default 1.5
-        Line width for plotting.
-    figsize : tuple, default (10, 4)
-        Figure size in inches.
-    dpi : int, default 150
-        PNG resolution.
-    styles : dict, optional
-        Optional style dict. Keys can be variable names (for `combine_by="var"`)
-        or station names (for `combine_by="station"`). Supports `"line_color"`.
-    verbose : bool, default True
-        Print progress and skipping reasons.
-    combine_by : {None, "var", "station"}, optional
-        Controls grouping of lines and files:
-        - None: one PNG per (station × variable).
-        - "var": one PNG per station; lines = variables.
-        - "station": one PNG per variable; lines = stations.
-
-    Returns
-    -------
-    None
-        Figures written to disk. Filenames encode station, depth, and time window.
-
     Notes
     -----
-    - If the DA lacks 'time', that series is skipped.
-    - Sparse grids may yield None for node/element indices; function uses whatever is available.
-    - Absolute-depth slicing occurs after spatial selection so depths align with the chosen column.
+    - This function samples a single column (nearest node/element). Spatial std is not
+      meaningful here unless you implement a neighborhood (k-nearest) option.
     """
     if combine_by not in (None, "var", "station"):
         raise ValueError("station_timeseries: combine_by must be None, 'var', or 'station'.")
@@ -381,7 +350,7 @@ def station_timeseries(
                 da = select_da_by_z(da, ds_for_z, target_z, verbose=verbose)
             else:
                 # SURFACE / BOTTOM / DEPTH-AVG / SIGMA-INDEX:
-                # do depth selection on the *dataset*, THEN evaluate the expression
+                # do depth selection on the dataset, THEN evaluate the expression
                 ds_depth = select_depth(ds_for_z, depth, verbose=verbose)
                 da = eval_group_or_var(ds_depth, var, groups)
 
@@ -401,7 +370,7 @@ def station_timeseries(
             _vprint(verbose, f"[station:{st_name}] Skip '{var}': {e}")
             return None
 
-    # combine_by='station' → per variable, lines = stations
+    # combine_by='station' -> per variable, lines = stations
     if combine_by == "station":
         for var in variables:
             plotted = []
@@ -417,7 +386,7 @@ def station_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"{var} — Stations ({tag}, {label})")
+            ax.set_title(f"{var} - Stations ({tag}, {label})")
             ax.set_xlabel("Time")
             ax.set_ylabel(var)
             ax.legend(loc="best")
@@ -429,7 +398,7 @@ def station_timeseries(
             _vprint(verbose, f"[station] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # combine_by='var' → per station, lines = variables
+    # combine_by='var' -> per station, lines = variables
     if combine_by == "var":
         for name, _lat, _lon in stations:
             fig, ax = plt.subplots(figsize=figsize)
@@ -445,7 +414,7 @@ def station_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"Station {name} — ({tag}, {label})")
+            ax.set_title(f"Station {name} - ({tag}, {label})")
             ax.set_xlabel("Time")
             ax.set_ylabel("Value")
             ax.legend(loc="best")
@@ -457,7 +426,7 @@ def station_timeseries(
             _vprint(verbose, f"[station] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # default: one per (station × variable)
+    # default: one per (station x variable)
     for name, _lat, _lon in stations:
         for var in variables:
             s = one_series(var, name)
@@ -467,7 +436,7 @@ def station_timeseries(
             fig, ax = plt.subplots(figsize=figsize)
             color = style_get(var, styles, "line_color", None)
             ax.plot(t, y, lw=linewidth, color=color)
-            ax.set_title(f"{var} — Station {name} ({tag}, {label})")
+            ax.set_title(f"{var} - Station {name} ({tag}, {label})")
             ax.set_xlabel("Time")
             ax.set_ylabel(var)
             fname = f"{prefix}__Station-{name}__{var}__{tag}__{label}__Timeseries.png"
@@ -475,6 +444,7 @@ def station_timeseries(
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
             plt.close(fig)
             _vprint(verbose, f"[station] Saved: {path}")
+
 
 
 def region_timeseries(
@@ -496,13 +466,16 @@ def region_timeseries(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
     combine_by: Optional[str] = None,  # None | "var" | "region"
+    show_std: bool = False,
+    std_alpha: float = 0.25,
 ) -> None:
     """
     Region-mean time series using polygon masks (shapefile or CSV boundary).
-    Supports both 3-D (time×siglay×space) and 2-D (time×space) variables.
-    For 2-D vars, auto-lifts to a single 'siglay' layer so depth logic is uniform.
-    Vertical selection (surface/bottom/depth_avg/sigma/absolute-z) is applied
-    AFTER masking the region (important for absolute-z).
+
+    Notes
+    -----
+    - If show_std=True, plots mean +/- 1 std across space at each time step.
+    - Robust to singleton dims returned by reductions (squeezes/reshapes to 1D).
     """
     if combine_by not in (None, "var", "region"):
         raise ValueError("region_timeseries: combine_by must be None, 'var', or 'region'.")
@@ -518,28 +491,11 @@ def region_timeseries(
     _vprint(verbose, f"[region] Start region time series for {len(regions)} region(s)")
     _vprint(verbose, f"[region] Depth={depth} -> tag='{tag}' | Time window='{label}'")
 
-    # Time filter once; depth is handled per-var AFTER masking.
     ds_t = filter_time(ds, months, years, start_date, end_date)
 
-    # ---------- helper: one (region × variable) series ----------
     def region_series(
         region_name: str, spec: Dict[str, Any], var: str
-    ) -> Optional[Tuple[pd.DatetimeIndex, np.ndarray]]:
-        """
-        Build a single time series for one (region × variable), applying:
-          1) polygon masking (nodes/elements),
-          2) vertical selection (surface/bottom/depth_avg/sigma or absolute-z),
-          3) spatial mean over the masked area (area-weighted if possible).
-
-        2-D inputs (time×node/nele) are auto-lifted to a single 'siglay' layer
-        so vertical logic is uniform.
-
-        Returns
-        -------
-        (pd.DatetimeIndex, np.ndarray) or None:
-            Time index and region-mean values; or None if the mask is empty,
-            variable missing, or the result has no 'time' dimension.
-        """
+    ) -> Optional[Tuple[pd.DatetimeIndex, np.ndarray, np.ndarray]]:
         # --- Build node mask (and element mask if topology present) ---
         try:
             if "shapefile" in spec:
@@ -577,10 +533,7 @@ def region_timeseries(
 
         # --- Lift 2-D fields to a single 'siglay' layer ---
         if "siglay" not in da.dims:
-            _vprint(
-                verbose,
-                f"[region:{region_name}] '{var}' has no 'siglay' — lifting to single layer.",
-            )
+            _vprint(verbose, f"[region:{region_name}] '{var}' has no 'siglay' - lifting to single layer.")
             sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
             da = da.expand_dims(siglay=sig)
             da["siglay"] = sig
@@ -598,36 +551,49 @@ def region_timeseries(
 
         # --- Vertical selection on the masked subset ---
         if "siglay" in da.dims:
-            # ensure the DA has a usable name (expressions often produce name=None)
             if da.name is None:
                 da = da.rename(var)
 
             if is_absolute_z(depth):
-                # numeric target z (float)
                 if isinstance(depth, (float, np.floating, int)):
                     target_z = float(depth)
                 elif isinstance(depth, tuple):
                     target_z = float(depth[1])
-                else:  # dict {"z_m": ...}
+                else:
                     target_z = float(depth["z_m"])
                 da = select_da_by_z(da, ds_sub, target_z, verbose=verbose)
             else:
-                # surface / bottom / depth_avg / sigma index
-                # operate on a temporary dataset built from the DA to avoid name=None bugs
                 ds_tmp = da.to_dataset(name=da.name)
                 ds_depth = select_depth(ds_tmp, depth, verbose=verbose)
                 da = ds_depth[da.name]
 
-        # --- Must have time dimension before reducing ---
         if "time" not in da.dims:
             _vprint(verbose, f"[region:{region_name}] '{var}' has no 'time'; skip.")
             return None
 
-        # --- Spatial mean (area-weighted if possible) ---
-        m = _space_mean(da, ds, verbose=verbose)  # <-- THIS was missing; caused NameError
-        return _time_index(m), m.values
+        sdims = _space_dims(da)
+        w = _align_art1_to_da(ds, da, verbose=verbose)
+        mean, std = weighted_mean_std(da, sdims, w)
 
-    # ---------- combine_by='var' → one plot per region, lines = variables ----------
+        tidx = _time_index(mean)
+
+        y = np.asarray(mean.values).squeeze().reshape(-1)
+        s = np.asarray(std.values).squeeze().reshape(-1)
+
+        if y.shape[0] != len(tidx):
+            raise ValueError(
+                f"[region:{region_name}] '{var}': time len={len(tidx)} but mean shape={y.shape} "
+                "after squeeze/reshape. Check reduction dims."
+            )
+        if s.shape[0] != len(tidx):
+            raise ValueError(
+                f"[region:{region_name}] '{var}': time len={len(tidx)} but std shape={s.shape} "
+                "after squeeze/reshape. Check reduction dims."
+            )
+
+        return tidx, y, s
+
+    # combine_by='var' -> one plot per region, lines = variables
     if combine_by == "var":
         for region_name, spec in regions:
             plotted = []
@@ -636,14 +602,17 @@ def region_timeseries(
                 s = region_series(region_name, spec, var)
                 if s is None:
                     continue
-                t, y = s
+                t, y, st = s
                 color = style_get(var, styles, "line_color", None)
-                ax.plot(t, y, lw=linewidth, label=var, color=color)
+                (line,) = ax.plot(t, y, lw=linewidth, label=var, color=color, zorder=2)
+                if show_std:
+                    c = line.get_color()
+                    ax.fill_between(t, y - st, y + st, alpha=std_alpha, color=c, zorder=1)
                 plotted.append(var)
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"Region {region_name} — ({tag}, {label})")
+            ax.set_title(f"Region {region_name} - ({tag}, {label})")
             ax.set_xlabel("Time")
             ax.set_ylabel("Value")
             ax.legend(loc="best")
@@ -653,23 +622,26 @@ def region_timeseries(
             _vprint(verbose, f"[region:{region_name}] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # ---------- combine_by='region' → one plot per variable, lines = regions ----------
+    # combine_by='region' -> one plot per variable, lines = regions
     if combine_by == "region":
         for var in variables:
             series = []
             for region_name, spec in regions:
                 s = region_series(region_name, spec, var)
                 if s is not None:
-                    t, y = s
-                    series.append((region_name, t, y))
+                    t, y, st = s
+                    series.append((region_name, t, y, st))
             if not series:
                 continue
 
             fig, ax = plt.subplots(figsize=figsize)
-            for rname, t, y in series:
+            for rname, t, y, st in series:
                 color = style_get(rname, styles, "line_color", None)
-                ax.plot(t, y, lw=linewidth, label=rname, color=color)
-            ax.set_title(f"{var} — Regions ({tag}, {label})")
+                (line,) = ax.plot(t, y, lw=linewidth, label=rname, color=color, zorder=2)
+                if show_std:
+                    c = line.get_color()
+                    ax.fill_between(t, y - st, y + st, alpha=std_alpha, color=c, zorder=1)
+            ax.set_title(f"{var} - Regions ({tag}, {label})")
             ax.set_xlabel("Time")
             ax.set_ylabel(var)
             ax.legend(loc="best")
@@ -679,17 +651,20 @@ def region_timeseries(
             _vprint(verbose, f"[region] Saved: {os.path.join(outdir, fname)}")
         return
 
-    # ---------- default: one PNG per (region × variable) ----------
+    # default: one PNG per (region x variable)
     for region_name, spec in regions:
         for var in variables:
             s = region_series(region_name, spec, var)
             if s is None:
                 continue
-            t, y = s
+            t, y, st = s
             fig, ax = plt.subplots(figsize=figsize)
             color = style_get(var, styles, "line_color", None)
-            ax.plot(t, y, lw=linewidth, color=color)
-            ax.set_title(f"{var} — Region {region_name} ({tag}, {label})")
+            (line,) = ax.plot(t, y, lw=linewidth, color=color, zorder=2)
+            if show_std:
+                c = line.get_color()
+                ax.fill_between(t, y - st, y + st, alpha=std_alpha, color=c, zorder=1)
+            ax.set_title(f"{var} - Region {region_name} ({tag}, {label})")
             ax.set_xlabel("Time")
             ax.set_ylabel(var)
             fname = f"{prefix}__Region-{region_name}__{var}__{tag}__{label}__Timeseries.png"
@@ -697,7 +672,6 @@ def region_timeseries(
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
             plt.close(fig)
             _vprint(verbose, f"[region:{region_name}] Saved: {path}")
-
 
 def _plot_three_panel(
     *,
@@ -721,54 +695,9 @@ def _plot_three_panel(
     """
     Internal helper to render a 3-panel figure for a single variable:
 
-      Panel 1: Surface time series (mean ± 1σ)
-      Panel 2: Bottom  time series (mean ± 1σ)
-      Panel 3: Depth profile vs 'siglay' (mean ± 1σ across time & space)
-
-    Parameters
-    ----------
-    t : np.ndarray
-        1D array of time values suitable for matplotlib plotting (e.g., datetime64 converted).
-    surf_mean, bott_mean : np.ndarray
-        1D arrays of mean values per time step for surface and bottom.
-    surf_std, bott_std : np.ndarray
-        1D arrays of standard deviation (±1σ) per time step for surface and bottom.
-    zcoord : np.ndarray
-        Vertical coordinate (e.g., 'siglay') for the profile panel; increasing or decreasing.
-    prof_mean, prof_std : np.ndarray
-        1D arrays of mean and standard deviation along `zcoord` (aggregated across time & space).
-    title_prefix : str
-        Title prefix describing scope (e.g., "Domain", "Station X", "Region Y").
-    var : str
-        Variable name used for labeling, styling, and filename.
-    label : str
-        Time window label (e.g., "JJA 2018", "2018-04–2018-10").
-    outdir : str
-        Directory to save the PNG file.
-    prefix : str
-        Filename prefix derived from `file_prefix(base_dir)`.
-    styles : dict, optional
-        Per-variable style dict. Recognized keys:
-          - "line_color": color for lines
-          - "line_width": float
-          - "shade_alpha": float transparency for ±σ fill
-          - "shade_color": explicit shade color (otherwise a lightened line color is used)
-          - "shade_lighten": float in (0..1) controlling how much to lighten the line color
-    dpi : int, default 150
-        PNG resolution.
-    figsize : tuple, default (11, 9)
-        Figure size in inches.
-
-    Returns
-    -------
-    None
-        Saves a PNG named:
-        ``<prefix>__<title_prefix>__<var>__3Panel__<label>__Timeseries.png``
-
-    Notes
-    -----
-    - If `zcoord` appears decreasing (typical for sigma indices), the y-axis is inverted.
-    - Colors: if no explicit color provided, uses MPL cycle and derives a lighter shade for the σ band.
+      Panel 1: Surface time series (mean +/- 1 std)
+      Panel 2: Bottom  time series (mean +/- 1 std)
+      Panel 3: Depth profile vs 'siglay' (mean +/- 1 std across time and space)
     """
 
     def _lighter(c, amount: float = 0.6) -> str:
@@ -782,21 +711,17 @@ def _plot_three_panel(
         b = b + (1.0 - b) * amount
         return to_hex((r, g, b))
 
-    # Resolve style for this var (fallbacks are sensible)
-    line_color = style_get(var, styles, "line_color", None)  # None -> MPL default cycle
+    # Resolve style for this var
+    line_color = style_get(var, styles, "line_color", None)  # None -> mpl default cycle
     line_width = style_get(var, styles, "line_width", 1.6)
     shade_alpha = style_get(var, styles, "shade_alpha", 0.25)
-    # optional explicit shade color; if not provided we'll compute a lighter one from the actual line color
     shade_color_pref = style_get(var, styles, "shade_color", None)
-    shade_lighten = style_get(
-        var, styles, "shade_lighten", 0.6
-    )  # how much to lighten if auto (0..1)
+    shade_lighten = style_get(var, styles, "shade_lighten", 0.6)
 
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=figsize, constrained_layout=True)
 
-    # --- Panel 1: surface ---
+    # Panel 1: surface
     ax = axes[0]
-    # draw line first to discover the *actual* color if user didn't set one
     (line_surf,) = ax.plot(t, surf_mean, lw=line_width, color=line_color, label="mean", zorder=2)
     actual_color = line_surf.get_color()
     shade_color = shade_color_pref or _lighter(actual_color, amount=shade_lighten)
@@ -806,47 +731,44 @@ def _plot_three_panel(
         surf_mean + surf_std,
         alpha=shade_alpha,
         color=shade_color,
-        label="±1σ",
+        label="+/-1 std",
         zorder=1,
     )
-    ax.set_title(f"{title_prefix} — {var} — Surface (±1σ)")
+    ax.set_title(f"{title_prefix} - {var} - Surface (+/-1 std)")
     ax.set_xlabel("Time")
     ax.set_ylabel(var)
     ax.legend(loc="best")
 
-    # --- Panel 2: bottom ---
+    # Panel 2: bottom
     ax = axes[1]
-    (line_bott,) = ax.plot(t, bott_mean, lw=line_width, color=actual_color, label="mean", zorder=2)
+    ax.plot(t, bott_mean, lw=line_width, color=actual_color, label="mean", zorder=2)
     ax.fill_between(
         t,
         bott_mean - bott_std,
         bott_mean + bott_std,
         alpha=shade_alpha,
         color=shade_color,
-        label="±1σ",
+        label="+/-1 std",
         zorder=1,
     )
-    ax.set_title(f"{title_prefix} — {var} — Bottom (±1σ)")
+    ax.set_title(f"{title_prefix} - {var} - Bottom (+/-1 std)")
     ax.set_xlabel("Time")
     ax.set_ylabel(var)
     ax.legend(loc="best")
 
-    # --- Panel 3: profile vs siglay ---
+    # Panel 3: profile vs siglay
     ax = axes[2]
-    # plot line first to reuse same color, then shade
-    (line_prof,) = ax.plot(
-        prof_mean, zcoord, lw=line_width, color=actual_color, label="mean", zorder=2
-    )
+    ax.plot(prof_mean, zcoord, lw=line_width, color=actual_color, label="mean", zorder=2)
     ax.fill_betweenx(
         zcoord,
         prof_mean - prof_std,
         prof_mean + prof_std,
         alpha=shade_alpha,
         color=shade_color,
-        label="±1σ",
+        label="+/-1 std",
         zorder=1,
     )
-    ax.set_title(f"{title_prefix} — {var} — Profile vs siglay (mean ±1σ)")
+    ax.set_title(f"{title_prefix} - {var} - Profile vs siglay (mean +/-1 std)")
     ax.set_xlabel(var)
     ax.set_ylabel("siglay")
     try:
@@ -878,49 +800,13 @@ def domain_three_panel(
     verbose: bool = False,
 ) -> None:
     """
-    Render 3-panel summaries for each variable at the domain scale:
-
-      (1) Surface time series (spatial mean ±1σ)
-      (2) Bottom  time series (spatial mean ±1σ)
-      (3) Depth profile vs 'siglay' (mean ±1σ across time & space)
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Source dataset.
-    variables : list of str
-        Variable or expression names to plot.
-    months, years : list[int], optional
-        Time filters.
-    start_date, end_date : str, optional
-        Inclusive date bounds "YYYY-MM-DD".
-    base_dir : str
-        Run root for filename prefixing.
-    figures_root : str
-        Output root directory.
-    groups : dict, optional
-        Alias/expression map for `eval_group_or_var`.
-    styles : dict, optional
-        Per-variable style overrides (see `_plot_three_panel` for keys).
-    dpi : int, default 150
-        PNG resolution.
-    figsize : tuple, default (11, 9)
-        Figure size for the 3-panel figure.
-    verbose : bool, default False
-        Print progress messages.
-
-    Returns
-    -------
-    None
-        One PNG per variable saved to disk. Filenames encode scope (Domain) and time label.
+    Render 3-panel summaries for each variable at the domain scale.
 
     Notes
     -----
-    - Surface/bottom time series are computed after `select_depth(ds_t, "surface"/"bottom")`.
-    - Spatial mean/std per time step use area weights (`art1`) if available and alignable.
-    - If a variable lacks 'siglay', a single-layer profile is plotted using surface stats.
+    - Surface/bottom time series are computed after select_depth(ds_t, "surface"/"bottom").
+    - Spatial mean/std per time step use area weights (art1) if available and alignable.
     """
-
     ds_t = filter_time(ds, months, years, start_date, end_date)
     label = build_time_window_label(months, years, start_date, end_date)
     outdir = out_dir(base_dir, figures_root)
@@ -931,7 +817,6 @@ def domain_three_panel(
 
     for var in variables:
         try:
-            # check the raw (unsliced) field for a vertical dimension first
             da_raw = eval_group_or_var(ds_t, var, groups)
         except Exception as e:
             print(f"[3panel/domain] Skip '{var}': {e}")
@@ -941,7 +826,6 @@ def domain_three_panel(
             continue
 
         try:
-            # Surface & bottom time series: spatial dims only reduced per timestep
             da_surf = eval_group_or_var(select_depth(ds_t, "surface"), var, groups)
             da_bott = eval_group_or_var(select_depth(ds_t, "bottom"), var, groups)
         except Exception as e:
@@ -959,7 +843,7 @@ def domain_three_panel(
         surf_mean, surf_std = weighted_mean_std(da_surf, _space_dims(da_surf), w_s)
         bott_mean, bott_std = weighted_mean_std(da_bott, _space_dims(da_bott), w_b)
 
-        # Profile: mean ±1σ over (time + space) at each siglay
+        # Profile: mean +/- 1 std over (time + space) at each siglay
         try:
             da_prof = eval_group_or_var(ds_t, var, groups)
         except Exception as e:
@@ -971,7 +855,6 @@ def domain_three_panel(
             prof_mean, prof_std = weighted_mean_std(da_prof, ["time"] + _space_dims(da_prof), w_p)
             zcoord = da_prof["siglay"].values
         else:
-            # No vertical dimension; emulate single-layer profile
             if verbose:
                 print(f"[3panel/domain] '{var}' has no 'siglay'; using surface-only profile.")
             zcoord = np.array([0.0])
@@ -1016,52 +899,12 @@ def station_three_panel(
     verbose: bool = False,
 ) -> None:
     """
-    Render 3-panel summaries for each (station × variable):
-
-      (1) Surface time series (temporal mean ±1σ at the station column)
-      (2) Bottom  time series (temporal mean ±1σ at the station column)
-      (3) Depth profile vs 'siglay' (temporal mean ±1σ at the station column)
-
-    At a single station (nearest node/element), spatial variance collapses, so
-    the ±σ shading reflects **temporal** variability rather than spatial.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Source dataset.
-    variables : list of str
-        Variable or expression names to plot.
-    stations : list of (str, float, float)
-        (name, lat, lon); nearest node/element is used for sampling.
-    months, years : list[int], optional
-        Time filters.
-    start_date, end_date : str, optional
-        Date bounds "YYYY-MM-DD".
-    base_dir : str
-        Run root for filename prefixing.
-    figures_root : str
-        Output root directory.
-    groups : dict, optional
-        Alias/expression map for `eval_group_or_var`.
-    styles : dict, optional
-        Per-variable style overrides (see `_plot_three_panel`).
-    dpi : int, default 150
-        PNG resolution.
-    figsize : tuple, default (11, 9)
-        Figure size for the 3-panel figure.
-    verbose : bool, default False
-        Print progress messages.
-
-    Returns
-    -------
-    None
-        One PNG per (station × variable) saved to disk.
+    Render 3-panel summaries for each (station x variable).
 
     Notes
     -----
-    - Surface/bottom arrays are subset to the nearest node/element before plotting.
-    - If the profile has 'siglay', profile stats are temporal means/std across time.
-      Otherwise a single-layer profile is synthesized from the surface series.
+    - At a single station column, spatial sigma does not exist, so the +/- band is zero.
+      (If you want station neighborhood sigma, add a k-nearest option.)
     """
     if not stations:
         return
@@ -1074,7 +917,6 @@ def station_three_panel(
     for name, lat, lon in stations:
         for var in variables:
             try:
-                # check raw field first for a vertical dim
                 da_raw = eval_group_or_var(ds_t, var, groups)
             except Exception as e:
                 print(f"[3panel/station {name}] Skip '{var}': {e}")
@@ -1090,7 +932,6 @@ def station_three_panel(
                 print(f"[3panel/station {name}] Skip '{var}': {e}")
                 continue
 
-            # select nearest index for the actual grid dimension each array has
             try:
                 node_idx = nearest_index_for_dim(ds_t, lat, lon, "node")
             except Exception:
@@ -1119,7 +960,7 @@ def station_three_panel(
 
             t = pd.to_datetime(da_surf["time"].values)
 
-            # Spatial σ doesn't exist at a single node — provide temporal σ for shading
+            # Spatial sigma does not exist at a single node: provide zero for shading
             surf_mean, surf_std = da_surf, xr.zeros_like(da_surf)
             bott_mean, bott_std = da_bott, xr.zeros_like(da_bott)
 
@@ -1170,58 +1011,8 @@ def region_three_panel(
     verbose: bool = False,
 ) -> None:
     """
-    Render 3-panel summaries for each (region × variable):
-
-      (1) Surface time series (spatial mean ±1σ within region)
-      (2) Bottom  time series (spatial mean ±1σ within region)
-      (3) Depth profile vs 'siglay' (mean ±1σ across time & space within region)
-
-    Regions are defined by polygon masks from a shapefile or CSV boundary.
-    If `art1` is present and alignable, spatial means/std are area-weighted.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Source dataset. Must contain 'lon' and 'lat' for region masking.
-    variables : list of str
-        Variable or expression names to plot.
-    regions : list of (str, dict)
-        Regions as (region_name, spec). `spec` must include either:
-          - {"shapefile": <path>, "name_field": ..., "name_equals": ...}
-          - {"csv_boundary": <path>, "lon_col": "lon", "lat_col": "lat"}
-    months, years : list[int], optional
-        Time filters.
-    start_date, end_date : str, optional
-        Date bounds "YYYY-MM-DD".
-    base_dir : str
-        Run root for filename prefixing.
-    figures_root : str
-        Output root directory.
-    groups : dict, optional
-        Alias/expression map for `eval_group_or_var`.
-    styles : dict, optional
-        Per-variable style overrides (see `_plot_three_panel`).
-    dpi : int, default 150
-        PNG resolution.
-    figsize : tuple, default (11, 9)
-        Figure size for the 3-panel figure.
-    verbose : bool, default False
-        Print progress and mask summaries.
-
-    Returns
-    -------
-    None
-        One PNG per (region × variable) saved to disk.
-
-    Notes
-    -----
-    - Builds node mask from polygon; element mask optionally derived from connectivity.
-    - Weights (`art1`) are subset to the same nodes/elements before computing means/std.
-    - If the variable lacks 'siglay', a single-layer profile is plotted using temporal
-      surface stats over the region.
+    Render 3-panel summaries for each (region x variable).
     """
-
-    # Helper: which dims are "space" for a given DataArray
     def space_dims(da: xr.DataArray) -> list[str]:
         return [d for d in da.dims if d not in ("time", "siglay")]
 
@@ -1237,7 +1028,6 @@ def region_three_panel(
         print(f"[3panel/region] Time label={label} | regions={len(regions)}")
 
     for region_name, spec in regions:
-        # --- Build region node mask ---
         try:
             if "shapefile" in spec:
                 if verbose:
@@ -1250,9 +1040,7 @@ def region_three_panel(
                 )
             elif "csv_boundary" in spec:
                 if verbose:
-                    print(
-                        f"[3panel/region {region_name}] Using CSV boundary: {spec['csv_boundary']}"
-                    )
+                    print(f"[3panel/region {region_name}] Using CSV boundary: {spec['csv_boundary']}")
                 poly = polygon_from_csv_boundary(
                     spec["csv_boundary"],
                     lon_col=spec.get("lon_col", "lon"),
@@ -1272,15 +1060,11 @@ def region_three_panel(
         if verbose:
             print(f"[3panel/region {region_name}] Node mask size: {np.count_nonzero(mask_nodes)}")
 
-        # Optional element mask (if connectivity is available)
         mask_elems = element_mask_from_node_mask(ds, mask_nodes)
         if verbose and mask_elems is not None:
-            print(
-                f"[3panel/region {region_name}] Element mask size: {np.count_nonzero(mask_elems)}"
-            )
+            print(f"[3panel/region {region_name}] Element mask size: {np.count_nonzero(mask_elems)}")
 
         for var in variables:
-            # --- Resolve variables at required depths + full for profile ---
             try:
                 da_raw = eval_group_or_var(ds_t, var, groups)
             except Exception as e:
@@ -1299,7 +1083,6 @@ def region_three_panel(
                 print(f"[3panel/region {region_name}] Skip '{var}': {e}")
                 continue
 
-            # --- Apply region mask to data ---
             if "node" in da_surf.dims:
                 idx_nodes = np.where(mask_nodes)[0]
                 da_surf = da_surf.isel(node=idx_nodes)
@@ -1325,7 +1108,6 @@ def region_three_panel(
 
             t = pd.to_datetime(da_surf["time"].values)
 
-            # --- Subset weights to EXACT same nodes/elements (avoid alignment errors) ---
             w_base = ds["art1"] if "art1" in ds else None
             w_s = w_b = w_p = None
             if w_base is not None:
@@ -1351,18 +1133,13 @@ def region_three_panel(
                     if "nele" in sd_p:
                         w_p = w_base.isel(nele=idx_elems)
 
-            # --- Compute spatial mean ±1σ per time (surface & bottom) ---
             surf_mean, surf_std = weighted_mean_std(da_surf, space_dims(da_surf), w_s)
             bott_mean, bott_std = weighted_mean_std(da_bott, space_dims(da_bott), w_b)
 
-            # --- Profile: mean ±1σ across time + space at each siglay ---
             if "siglay" in da_prof.dims:
-                prof_mean, prof_std = weighted_mean_std(
-                    da_prof, ["time"] + space_dims(da_prof), w_p
-                )
+                prof_mean, prof_std = weighted_mean_std(da_prof, ["time"] + space_dims(da_prof), w_p)
                 zcoord = da_prof["siglay"].values
             else:
-                # No vertical dim → single-layer “profile”
                 zcoord = np.array([0.0])
                 prof_mean = da_surf.mean("time", skipna=True)
                 prof_std = xr.zeros_like(prof_mean)
@@ -1388,3 +1165,4 @@ def region_three_panel(
                 dpi=dpi,
                 figsize=figsize,
             )
+
