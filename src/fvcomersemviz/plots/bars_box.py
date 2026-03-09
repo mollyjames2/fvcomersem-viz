@@ -296,6 +296,54 @@ def _extract_station_index(
     d2 = dx * dx + dy * dy
     return int(np.argmin(d2))
 
+def _split_identity_and_dispatch(
+    *,
+    split_by: Optional[str],
+    ds: xr.Dataset,
+    variables: List[str],
+    depth_list: List[Any],
+    regions: Optional[List[Tuple[str, Dict[str, Any]]]],
+    stations: Optional[List[Tuple[str, float, float]]],
+    call_fn,
+    base_kwargs: Dict[str, Any],
+) -> bool:
+    """
+    Split plotting calls by identity dimensions only.
+
+    Returns True if splitting was performed (caller should return).
+    """
+
+    if split_by is None:
+        return False
+
+    if split_by == "variable":
+        for v in variables:
+            call_fn(ds, variables=[v], **base_kwargs)
+        return True
+
+    if split_by == "depth":
+        for d in depth_list:
+            call_fn(ds, depth=d, **base_kwargs)
+        return True
+
+    if split_by == "region":
+        if regions is None:
+            raise ValueError("split_by='region' requires regions=...")
+        for r in regions:
+            call_fn(ds, regions=[r], **base_kwargs)
+        return True
+
+    if split_by == "station":
+        if stations is None:
+            raise ValueError("split_by='station' requires stations=...")
+        for s in stations:
+            call_fn(ds, stations=[s], **base_kwargs)
+        return True
+
+    raise ValueError(
+        "split_by must be one of: "
+        "None, 'variable', 'depth', 'region', 'station'"
+    )
 
 # -----------------------
 # main function
@@ -317,6 +365,7 @@ def plot_bars(
     seasons: Optional[Dict[str, Sequence[int]]] = None,
     # grouped variables
     groups: Optional[Dict[str, Any]] = None,
+    split_by: Optional[str] = None, 
     # plot grammar
     facet_by: Optional[str] = None,
     x_by: str = "region",
@@ -407,6 +456,45 @@ def plot_bars(
         depth_list = list(depth)
     else:
         depth_list = [depth]
+    
+        # --------------------------------------------------
+    # Split into multiple figures by identity dimension
+    # --------------------------------------------------
+    if _split_identity_and_dispatch(
+        split_by=split_by,
+        ds=ds,
+        variables=variables,
+        depth_list=depth_list,
+        regions=regions,
+        stations=stations,
+        call_fn=plot_bars,
+        base_kwargs=dict(
+            regions=regions,
+            stations=stations,
+            depth=depth,
+            months=months,
+            years=years,
+            start_date=start_date,
+            end_date=end_date,
+            seasons=seasons,
+            groups=groups,
+            facet_by=facet_by,
+            x_by=x_by,
+            hue_by=hue_by,
+            hue_colors=hue_colors,
+            error=error,
+            dpi=dpi,
+            figsize=figsize,
+            ncols=ncols,
+            title=title,
+            ylabel=ylabel,
+            base_dir=base_dir,
+            figures_root=figures_root,
+            verbose=verbose,
+        ),
+    ):
+        return
+
 
     # output tags
     label = build_time_window_label(months, years, start_date, end_date)
@@ -817,7 +905,14 @@ def plot_bars(
     fig.tight_layout(rect=[0, 0, 1, 0.95])
 
     # filename
-    fname = f"{prefix}__Bars__vars-{len(variables)}__{depth_part}__{label}"
+    # filename
+    if len(variables) == 1:
+        var_part = variables[0]
+    else:
+        var_part = f"vars-{len(variables)}"
+    
+    fname = f"{prefix}__Bars__{var_part}__{depth_part}__{label}"
+
     fname += f"__x-{x_by}"
     if hue_by is not None:
         fname += f"__hue-{hue_by}"
@@ -885,6 +980,7 @@ def plot_box(
     seasons: Optional[Dict[str, Sequence[int]]] = None,
     # grouped variables
     groups: Optional[Dict[str, Any]] = None,
+    split_by: Optional[str] = None, 
     # plot grammar
     facet_by: Optional[str] = None,
     x_by: str = "region",
@@ -957,6 +1053,48 @@ def plot_box(
         depth_list = list(depth)
     else:
         depth_list = [depth]
+    
+        # --------------------------------------------------
+    # Split into multiple figures by identity dimension
+    # --------------------------------------------------
+    if _split_identity_and_dispatch(
+        split_by=split_by,
+        ds=ds,
+        variables=variables,
+        depth_list=depth_list,
+        regions=regions,
+        stations=stations,
+        call_fn=plot_box,
+        base_kwargs=dict(
+            regions=regions,
+            stations=stations,
+            depth=depth,
+            months=months,
+            years=years,
+            start_date=start_date,
+            end_date=end_date,
+            seasons=seasons,
+            groups=groups,
+            facet_by=facet_by,
+            x_by=x_by,
+            hue_by=hue_by,
+            hue_colors=hue_colors,
+            dpi=dpi,
+            figsize=figsize,
+            ncols=ncols,
+            title=title,
+            ylabel=ylabel,
+            ylabels=ylabels,
+            max_samples_per_bin=max_samples_per_bin,
+            random_seed=random_seed,
+            base_dir=base_dir,
+            figures_root=figures_root,
+            verbose=verbose,
+        ),
+    ):
+        return
+
+
 
     label = build_time_window_label(months, years, start_date, end_date)
     prefix = file_prefix(base_dir)
@@ -1314,8 +1452,13 @@ def plot_box(
         fig_title = title
     fig.suptitle(fig_title)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
+    if len(variables) == 1:
+        var_part = variables[0]
+    else:
+        var_part = f"vars-{len(variables)}"
+    
+    fname = f"{prefix}__Box__{var_part}__{depth_part}__{label}"
 
-    fname = f"{prefix}__Box__vars-{len(variables)}__{depth_part}__{label}"
     fname += f"__x-{x_by}"
     if hue_by is not None:
         fname += f"__hue-{hue_by}"
