@@ -252,6 +252,44 @@ def main() -> int:
         max_samples_per_bin=20000,
         random_seed=0,
     )
+        # -----------------------------------------------------------------
+    # EXAMPLE 4:
+    # Split by variable (one figure per variable)
+    #
+    # Same grouping as Example 1:
+    # - x-axis = region
+    # - hue = season (Spring vs Summer)
+    #
+    # But instead of 4 panels in one figure,
+    # this produces 4 separate figures:
+    #   - temp
+    #   - O3_pH
+    #   - O3_TA
+    #   - O3_pCO2
+    # -----------------------------------------------------------------
+    info("Example 4: Split by variable (one boxplot figure per variable)")
+    plot_box(
+        ds,
+        VARS_4,
+        split_by="variable",      # <-- NEW FEATURE UNDER TEST
+        regions=REGIONS,
+        depth="surface",
+        seasons=SEASONS_2,
+        months=[3, 4, 5, 6, 7, 8],  # Spring + Summer only
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        x_by="region",
+        hue_by="season",
+        hue_colors=SEASON_COLORS,
+        ylabel=None,              # single variable per figure
+        ylabels=Y_LABELS,         # safe to pass; only one is used
+        figsize=(8, 6),
+        title="Seasonal differences by basin (Spring vs Summer)",
+        max_samples_per_bin=20000,
+        random_seed=0,
+        verbose=True,
+    )
+
 
     info("Done")
     return 0

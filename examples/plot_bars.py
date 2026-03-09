@@ -348,6 +348,32 @@ def main() -> int:
         ylabel="DOC",
     )
 
+
+    # -----------------------------------------------------------------
+    # Example 7: Split by variable
+    #   - One figure per variable
+    #   - Each figure shows mean by region (CI95)
+    # -----------------------------------------------------------------
+    info("Example 7: Split by variable (one figure per variable)")
+    plot_bars(
+        ds,
+        ["DOC", "temp"],          # multiple variables
+        split_by="variable",      # <-- THIS IS THE NEW FEATURE
+        regions=REGIONS,
+        depth="surface",
+        groups=DOC_GROUPS,
+        seasons=SEASONS,
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+        x_by="region",
+        hue_by=None,
+        facet_by=None,
+        error="ci95",
+        title="Surface mean by region (CI95)",  # reused for all figures
+        ylabel="Value",
+        verbose=True,
+    )
+
     info("Done")
     return 0
 
