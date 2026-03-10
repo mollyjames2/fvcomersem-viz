@@ -161,9 +161,9 @@ FIG_DIR = "/data/proteus1/scratch/moja/projects/Lake_Erie/fviz-plots/"
 # Region specs
 # ---------------------------------------------------------------------
 REGIONS = [
+    ("West", {"shapefile": "../data/shapefiles/west_basin_single.shp"}),
     ("Central", {"shapefile": "../data/shapefiles/central_basin_single.shp"}),
     ("East", {"shapefile": "../data/shapefiles/east_basin_single.shp"}),
-    ("West", {"shapefile": "../data/shapefiles/west_basin_single.shp"}),
 ]
 
 # ---------------------------------------------------------------------

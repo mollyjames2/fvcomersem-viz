@@ -114,7 +114,6 @@ def main():
     kv("Filename prefix", prefix)
 
     # ========================================================================= #
-    # 1) Light vs Chlorophyll - surface - JJA 2018 - Central vs East (binned)
     # ========================================================================= #
     info(" Example 1: Light vs Chlorophyll - surface - JJA 2018 - Central vs East")
     bullet("Binned median with IQR shading; daylight only; one curve per region")

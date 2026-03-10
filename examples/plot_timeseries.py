@@ -468,7 +468,6 @@ def main():
         combine_by="var",
     )
 
-    # Output recap
     info(" Output recap")
     bullet(
         "All figures are PNGs named like:\n"

@@ -131,7 +131,6 @@ def main():
     kv("Filename prefix", prefix)
 
     # ===============================================================
-    # 1) DOMAIN • JJA • group=P5 • variable=P5_c
     # ===============================================================
     info(" Example 1: DOMAIN • JJA • group=P5 • variable=P5_c")
     bullet(
@@ -178,7 +177,6 @@ def main():
         )
 
     # ===============================================================
-    # 3) DOMAIN • full run • group=P5 • variable=chl (composite)
     # ===============================================================
     info(" Example 3: DOMAIN • full run • group=P5 • variable=chl")
     plot_call(

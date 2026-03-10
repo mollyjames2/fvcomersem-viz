@@ -446,7 +446,6 @@ def station_timeseries(
             _vprint(verbose, f"[station] Saved: {path}")
 
 
-
 def region_timeseries(
     ds: xr.Dataset,
     variables: List[str],
@@ -533,7 +532,10 @@ def region_timeseries(
 
         # --- Lift 2-D fields to a single 'siglay' layer ---
         if "siglay" not in da.dims:
-            _vprint(verbose, f"[region:{region_name}] '{var}' has no 'siglay' - lifting to single layer.")
+            _vprint(
+                verbose,
+                f"[region:{region_name}] '{var}' has no 'siglay' - lifting to single layer.",
+            )
             sig = xr.DataArray([-0.5], dims=["siglay"], name="siglay")
             da = da.expand_dims(siglay=sig)
             da["siglay"] = sig
@@ -672,6 +674,7 @@ def region_timeseries(
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
             plt.close(fig)
             _vprint(verbose, f"[region:{region_name}] Saved: {path}")
+
 
 def _plot_three_panel(
     *,
@@ -1013,6 +1016,7 @@ def region_three_panel(
     """
     Render 3-panel summaries for each (region x variable).
     """
+
     def space_dims(da: xr.DataArray) -> list[str]:
         return [d for d in da.dims if d not in ("time", "siglay")]
 
@@ -1040,7 +1044,9 @@ def region_three_panel(
                 )
             elif "csv_boundary" in spec:
                 if verbose:
-                    print(f"[3panel/region {region_name}] Using CSV boundary: {spec['csv_boundary']}")
+                    print(
+                        f"[3panel/region {region_name}] Using CSV boundary: {spec['csv_boundary']}"
+                    )
                 poly = polygon_from_csv_boundary(
                     spec["csv_boundary"],
                     lon_col=spec.get("lon_col", "lon"),
@@ -1062,7 +1068,9 @@ def region_three_panel(
 
         mask_elems = element_mask_from_node_mask(ds, mask_nodes)
         if verbose and mask_elems is not None:
-            print(f"[3panel/region {region_name}] Element mask size: {np.count_nonzero(mask_elems)}")
+            print(
+                f"[3panel/region {region_name}] Element mask size: {np.count_nonzero(mask_elems)}"
+            )
 
         for var in variables:
             try:
@@ -1137,7 +1145,9 @@ def region_three_panel(
             bott_mean, bott_std = weighted_mean_std(da_bott, space_dims(da_bott), w_b)
 
             if "siglay" in da_prof.dims:
-                prof_mean, prof_std = weighted_mean_std(da_prof, ["time"] + space_dims(da_prof), w_p)
+                prof_mean, prof_std = weighted_mean_std(
+                    da_prof, ["time"] + space_dims(da_prof), w_p
+                )
                 zcoord = da_prof["siglay"].values
             else:
                 zcoord = np.array([0.0])
@@ -1165,4 +1175,3 @@ def region_three_panel(
                 dpi=dpi,
                 figsize=figsize,
             )
-

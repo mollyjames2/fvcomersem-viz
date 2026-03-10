@@ -169,7 +169,9 @@ def _pick_color_map(hue_levels: List[str], hue_colors: Optional[Any]) -> Dict[st
     raise TypeError("hue_colors must be None, a dict, or a list/tuple")
 
 
-def _space_mean_over_dims(da: xr.DataArray, ds: xr.Dataset, *, verbose: bool = False) -> xr.DataArray:
+def _space_mean_over_dims(
+    da: xr.DataArray, ds: xr.Dataset, *, verbose: bool = False
+) -> xr.DataArray:
     """Mean across all non-time dims; area-weight with art1 if possible.
 
     Mirrors the behavior used in other plotters: reduce everything except time.
@@ -191,7 +193,10 @@ def _space_mean_over_dims(da: xr.DataArray, ds: xr.Dataset, *, verbose: bool = F
                     try:
                         w = w.sel({d: da[d]})
                     except Exception:
-                        _vprint(verbose, f"[space-mean] Failed to align 'art1' on dim '{d}', using simple mean")
+                        _vprint(
+                            verbose,
+                            f"[space-mean] Failed to align 'art1' on dim '{d}', using simple mean",
+                        )
                         return da.mean(space_dims, skipna=True)
                 else:
                     return da.mean(space_dims, skipna=True)
@@ -284,7 +289,9 @@ def _extract_station_index(
         y = np.asarray(ds["lat"].values).ravel()
     elif kind == "nele":
         if "lonc" not in ds or "latc" not in ds:
-            raise ValueError("Station selection requires ds['lonc'] and ds['latc'] for element fields.")
+            raise ValueError(
+                "Station selection requires ds['lonc'] and ds['latc'] for element fields."
+            )
         x = np.asarray(ds["lonc"].values).ravel()
         y = np.asarray(ds["latc"].values).ravel()
     else:
@@ -295,6 +302,7 @@ def _extract_station_index(
     dy = y - float(lat)
     d2 = dx * dx + dy * dy
     return int(np.argmin(d2))
+
 
 def _split_identity_and_dispatch(
     *,
@@ -340,10 +348,8 @@ def _split_identity_and_dispatch(
             call_fn(ds, stations=[s], **base_kwargs)
         return True
 
-    raise ValueError(
-        "split_by must be one of: "
-        "None, 'variable', 'depth', 'region', 'station'"
-    )
+    raise ValueError("split_by must be one of: None, 'variable', 'depth', 'region', 'station'")
+
 
 # -----------------------
 # main function
@@ -365,7 +371,7 @@ def plot_bars(
     seasons: Optional[Dict[str, Sequence[int]]] = None,
     # grouped variables
     groups: Optional[Dict[str, Any]] = None,
-    split_by: Optional[str] = None, 
+    split_by: Optional[str] = None,
     # plot grammar
     facet_by: Optional[str] = None,
     x_by: str = "region",
@@ -424,7 +430,9 @@ def plot_bars(
     # guard: ambiguous spatial grouping
     spatial_dims_used = {d for d in [facet_by, x_by, hue_by] if d in ("region", "station")}
     if "region" in spatial_dims_used and "station" in spatial_dims_used:
-        raise ValueError("Do not mix 'region' and 'station' within one plot (choose one spatial grouping).")
+        raise ValueError(
+            "Do not mix 'region' and 'station' within one plot (choose one spatial grouping)."
+        )
 
     if x_by == "region" and regions is None:
         raise ValueError("x_by='region' requires regions=...")
@@ -456,7 +464,7 @@ def plot_bars(
         depth_list = list(depth)
     else:
         depth_list = [depth]
-    
+
         # --------------------------------------------------
     # Split into multiple figures by identity dimension
     # --------------------------------------------------
@@ -494,7 +502,6 @@ def plot_bars(
         ),
     ):
         return
-
 
     # output tags
     label = build_time_window_label(months, years, start_date, end_date)
@@ -570,7 +577,9 @@ def plot_bars(
                 raise ValueError("Element-centered variable but 'nv' missing for element mask")
             da = da.where(region_masks_elem[region_name])
         else:
-            _vprint(verbose, f"[bars] Variable '{var}' has no node/nele dims; region masking skipped")
+            _vprint(
+                verbose, f"[bars] Variable '{var}' has no node/nele dims; region masking skipped"
+            )
 
         da_1d = _space_mean_over_dims(da, ds_t, verbose=verbose).squeeze()
         if "time" not in da_1d.dims:
@@ -580,7 +589,9 @@ def plot_bars(
                 raise ValueError("Result has no time dimension")
         return da_1d
 
-    def _series_for_station(var: str, depth_sel: Any, station_name: str, lon: float, lat: float) -> xr.DataArray:
+    def _series_for_station(
+        var: str, depth_sel: Any, station_name: str, lon: float, lat: float
+    ) -> xr.DataArray:
         da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose)
 
         if "node" in da.dims:
@@ -590,7 +601,9 @@ def plot_bars(
             idx = _extract_station_index(ds_t, lon=lon, lat=lat, kind="nele")
             da_s = da.isel(nele=idx)
         else:
-            raise ValueError(f"Station selection not supported for variable '{var}' (no node/nele dim).")
+            raise ValueError(
+                f"Station selection not supported for variable '{var}' (no node/nele dim)."
+            )
 
         da_s = da_s.squeeze()
         if "time" not in da_s.dims:
@@ -715,9 +728,17 @@ def plot_bars(
 
                 if not time_dims_used:
                     # No time grouping at all: everything goes into one bin
-                    facet_level = _level_for_identity_dim(facet_by, id_levels) if facet_by in _ID_DIMS else "all"
-                    x_level = _level_for_identity_dim(x_by, id_levels) if x_by in _ID_DIMS else "all"
-                    hue_level = _level_for_identity_dim(hue_by, id_levels) if hue_by in _ID_DIMS else "_"
+                    facet_level = (
+                        _level_for_identity_dim(facet_by, id_levels)
+                        if facet_by in _ID_DIMS
+                        else "all"
+                    )
+                    x_level = (
+                        _level_for_identity_dim(x_by, id_levels) if x_by in _ID_DIMS else "all"
+                    )
+                    hue_level = (
+                        _level_for_identity_dim(hue_by, id_levels) if hue_by in _ID_DIMS else "_"
+                    )
                     key = (str(facet_level), str(x_level), str(hue_level))
                     stats.setdefault(key, _RunningStats()).update(vals)
                     continue
@@ -757,7 +778,9 @@ def plot_bars(
 
                 # Group indices by (facet, x, hue)
                 # Using pandas MultiIndex for robust grouping on object arrays.
-                mi = pd.MultiIndex.from_arrays([facet_arr, x_arr, hue_arr], names=["facet", "x", "hue"])
+                mi = pd.MultiIndex.from_arrays(
+                    [facet_arr, x_arr, hue_arr], names=["facet", "x", "hue"]
+                )
                 # factorize returns codes per sample and uniques per group
                 codes, uniques = pd.factorize(mi)
 
@@ -785,11 +808,9 @@ def plot_bars(
             month_levels=month_levels,
             years=years_in_data,
         )
-        if explicit is not None and len(explicit) > 0:
-            # filter to only those that actually appear
-            have = {k[i] for k in stats.keys() for i in [0, 1, 2] if role_name in ("facet", "x", "hue")}
-            # (above "have" is too broad; do role-specific below)
-            pass
+        # preserve user-supplied region order
+        if explicit is None and role_dim == "region":
+            explicit = region_names
 
         # role-specific present levels:
         idx = {"facet": 0, "x": 1, "hue": 2}[role_name]
@@ -843,7 +864,7 @@ def plot_bars(
                 e.append(rs.err(error))
 
             ax.bar(x_pos, y, width=bar_width)
-            ax.errorbar(x_pos, y, yerr=e, fmt="none", capsize=3,color="black")
+            ax.errorbar(x_pos, y, yerr=e, fmt="none", capsize=3, color="black")
             ax.set_xticks(x_pos)
             ax.set_xticklabels(x_levels, rotation=45, ha="right")
 
@@ -910,7 +931,7 @@ def plot_bars(
         var_part = variables[0]
     else:
         var_part = f"vars-{len(variables)}"
-    
+
     fname = f"{prefix}__Bars__{var_part}__{depth_part}__{label}"
 
     fname += f"__x-{x_by}"
@@ -924,8 +945,8 @@ def plot_bars(
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     _vprint(verbose, f"[bars] Saved: {path}")
-    
-    
+
+
 # -----------------------
 # box + whisker plots (streaming with reservoir sampling)
 # -----------------------
@@ -980,7 +1001,7 @@ def plot_box(
     seasons: Optional[Dict[str, Sequence[int]]] = None,
     # grouped variables
     groups: Optional[Dict[str, Any]] = None,
-    split_by: Optional[str] = None, 
+    split_by: Optional[str] = None,
     # plot grammar
     facet_by: Optional[str] = None,
     x_by: str = "region",
@@ -1023,7 +1044,9 @@ def plot_box(
 
     spatial_dims_used = {d for d in [facet_by, x_by, hue_by] if d in ("region", "station")}
     if "region" in spatial_dims_used and "station" in spatial_dims_used:
-        raise ValueError("Do not mix 'region' and 'station' within one plot (choose one spatial grouping).")
+        raise ValueError(
+            "Do not mix 'region' and 'station' within one plot (choose one spatial grouping)."
+        )
 
     if x_by == "region" and regions is None:
         raise ValueError("x_by='region' requires regions=...")
@@ -1053,7 +1076,7 @@ def plot_box(
         depth_list = list(depth)
     else:
         depth_list = [depth]
-    
+
         # --------------------------------------------------
     # Split into multiple figures by identity dimension
     # --------------------------------------------------
@@ -1093,8 +1116,6 @@ def plot_box(
         ),
     ):
         return
-
-
 
     label = build_time_window_label(months, years, start_date, end_date)
     prefix = file_prefix(base_dir)
@@ -1167,7 +1188,9 @@ def plot_box(
                 raise ValueError("Element-centered variable but 'nv' missing for element mask")
             da = da.where(region_masks_elem[region_name])
         else:
-            _vprint(verbose, f"[box] Variable '{var}' has no node/nele dims; region masking skipped")
+            _vprint(
+                verbose, f"[box] Variable '{var}' has no node/nele dims; region masking skipped"
+            )
         da_1d = _space_mean_over_dims(da, ds_t, verbose=verbose).squeeze()
         if "time" not in da_1d.dims:
             if "time" in da.dims:
@@ -1176,7 +1199,9 @@ def plot_box(
                 raise ValueError("Result has no time dimension")
         return da_1d
 
-    def _series_for_station(var: str, depth_sel: Any, station_name: str, lon: float, lat: float) -> xr.DataArray:
+    def _series_for_station(
+        var: str, depth_sel: Any, station_name: str, lon: float, lat: float
+    ) -> xr.DataArray:
         da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose)
         if "node" in da.dims:
             idx = _extract_station_index(ds_t, lon=lon, lat=lat, kind="node")
@@ -1185,7 +1210,9 @@ def plot_box(
             idx = _extract_station_index(ds_t, lon=lon, lat=lat, kind="nele")
             da_s = da.isel(nele=idx)
         else:
-            raise ValueError(f"Station selection not supported for variable '{var}' (no node/nele dim).")
+            raise ValueError(
+                f"Station selection not supported for variable '{var}' (no node/nele dim)."
+            )
         da_s = da_s.squeeze()
         if "time" not in da_s.dims:
             if "time" in da.dims:
@@ -1226,7 +1253,11 @@ def plot_box(
             if regions is not None:
                 tmp: List[Tuple[Dict[str, str], xr.DataArray]] = []
                 for region_name in region_names:
-                    ctx = {"variable": str(var), "region": str(region_name), "depth": str(depth_level)}
+                    ctx = {
+                        "variable": str(var),
+                        "region": str(region_name),
+                        "depth": str(depth_level),
+                    }
                     s = _series_for_region(var, depth_sel, region_name)
                     tmp.append((ctx, s))
                 series_iter = tmp
@@ -1234,7 +1265,11 @@ def plot_box(
             elif stations is not None:
                 tmp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
                 for station_name, lon, lat in stations:
-                    ctx = {"variable": str(var), "station": str(station_name), "depth": str(depth_level)}
+                    ctx = {
+                        "variable": str(var),
+                        "station": str(station_name),
+                        "depth": str(depth_level),
+                    }
                     s = _series_for_station(var, depth_sel, station_name, lon, lat)
                     tmp2.append((ctx, s))
                 series_iter = tmp2
@@ -1303,7 +1338,9 @@ def plot_box(
                 hue_arr = hue_arr[m]
                 v = vals[m]
 
-                mi = pd.MultiIndex.from_arrays([facet_arr, x_arr, hue_arr], names=["facet", "x", "hue"])
+                mi = pd.MultiIndex.from_arrays(
+                    [facet_arr, x_arr, hue_arr], names=["facet", "x", "hue"]
+                )
                 codes, uniques = pd.factorize(mi)
 
                 for gi, u in enumerate(uniques):
@@ -1327,6 +1364,9 @@ def plot_box(
             month_levels=month_levels,
             years=years_in_data,
         )
+        # preserve user-supplied region order
+        if explicit is None and role_dim == "region":
+            explicit = region_names
 
         idx = {"facet": 0, "x": 1, "hue": 2}[role_name]
         present = sorted({k[idx] for k in bins.keys()})
@@ -1391,7 +1431,10 @@ def plot_box(
             for j, hue_level in enumerate(hue_no_blank):
                 offset = (j - (n_h - 1) / 2.0) * box_width
                 positions = x_pos + offset
-                data = [bins.get((facet_level, xl, hue_level), _Reservoir(k=1)).values() for xl in x_levels]
+                data = [
+                    bins.get((facet_level, xl, hue_level), _Reservoir(k=1)).values()
+                    for xl in x_levels
+                ]
 
                 color = hue_color_map.get(hue_level, None)
                 if color is None:
@@ -1456,7 +1499,7 @@ def plot_box(
         var_part = variables[0]
     else:
         var_part = f"vars-{len(variables)}"
-    
+
     fname = f"{prefix}__Box__{var_part}__{depth_part}__{label}"
 
     fname += f"__x-{x_by}"
@@ -1470,4 +1513,3 @@ def plot_box(
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     _vprint(verbose, f"[box] Saved: {path}")
-

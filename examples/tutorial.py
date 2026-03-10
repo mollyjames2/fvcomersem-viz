@@ -1760,7 +1760,6 @@ if plot_composition:
         composition_at_depth_single,
     )
 
-    # 1) DOMAIN • JJA 2018 • Surface/Bottom composition
     info(" Example 1: DOMAIN • JJA 2018 • Surface/Bottom composition")
     bullet(
         "Produces stacked bars: [Surface Phyto | Surface Zoo] ; [Bottom Phyto | Bottom Zoo]"
@@ -1778,7 +1777,6 @@ if plot_composition:
     )
 
     # =========================================================================
-    # 2) REGION (Central) • Apr-Oct 2018 • Surface/Bottom composition
     # =========================================================================
     info(" Example 2: REGION(Central) • Apr-Oct 2018 • Surface/Bottom composition")
     composition_surface_bottom(
@@ -1794,7 +1792,6 @@ if plot_composition:
     )
 
     # =========================================================================
-    # 3) DOMAIN • JJA 2018 • Depth-averaged composition
     # =========================================================================
     info(" Example 3: DOMAIN • JJA 2018 • Depth-averaged composition")
     bullet(

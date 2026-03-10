@@ -227,7 +227,6 @@ def station_hovmoller(
             vmin_eff = style_get(var, styles, "vmin", vmin)
             vmax_eff = style_get(var, styles, "vmax", vmax)
 
-            # --- SIGMA AXIS ---
             if axis == "sigma":
                 if "siglay" in A.coords and getattr(A["siglay"], "ndim", 0) == 1:
                     y = A["siglay"].values
@@ -265,7 +264,6 @@ def station_hovmoller(
                 plt.close(fig)
                 _vprint(verbose, f"[hovmoller:{name}] saved {fname}")
 
-            # --- ABSOLUTE Z AXIS ---
             else:  # axis == 'z'
                 ds_z = ensure_z_from_sigma(ds_t, verbose=verbose)
                 if "z" not in ds_z and "z_nele" not in ds_z:

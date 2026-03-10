@@ -126,7 +126,6 @@ def main():
     kv("Filename prefix", prefix)
 
     # =========================================================================
-    # 1) DOMAIN • JJA 2018 • Surface/Bottom composition
     # =========================================================================
     info(" Example 1: DOMAIN • JJA 2018 • Surface/Bottom composition")
     bullet(
@@ -146,7 +145,6 @@ def main():
     )
 
     # =========================================================================
-    # 2) REGION (Central) • Apr-Oct 2018 • Surface/Bottom composition
     # =========================================================================
     info(" Example 2: REGION(Central) • Apr-Oct 2018 • Surface/Bottom composition")
     plot_call(
@@ -163,7 +161,6 @@ def main():
     )
 
     # =========================================================================
-    # 3) DOMAIN • JJA 2018 • Depth-averaged composition
     # =========================================================================
     info(" Example 3: DOMAIN • JJA 2018 • Depth-averaged composition")
     bullet(
@@ -202,7 +199,6 @@ def main():
     )
 
     # =========================================================================
-    # 5) DOMAIN • Apr-Oct 2018 • Surface - Fraction time-series
     # =========================================================================
     info(" Example 5: DOMAIN • Apr-Oct 2018 • Surface - Fraction time-series")
     phy_path, zoo_path = composition_fraction_timeseries(
@@ -225,7 +221,6 @@ def main():
         kv("Saved (Zoo TS)", zoo_path)
 
     # =========================================================================
-    # 6) REGIONS • Apr-Oct 2018 • Surface - Fraction time-series
     # =========================================================================
     info(" Example 6: REGIONS • Apr-Oct 2018 • Surface - Fraction time-series")
     bullet("One figure with N stacked panels (one per region)")
@@ -250,7 +245,6 @@ def main():
         kv("Saved (Zoo TS, regions)", zoo_path)
 
     # =========================================================================
-    # 7) STATIONS • Apr-Oct 2018 • Surface - Fraction time-series
     # =========================================================================
     info(" Example 7: STATIONS • Apr-Oct 2018 • Surface - Fraction time-series")
     bullet("One figure with N stacked panels (one per station)")
