@@ -49,6 +49,11 @@ def plot_bubbles(
       - We plot Z = -depth (negative), matching the MATLAB script.
       - Z-limits are zoomed like MATLAB to the plume band (not up to 0).
 
+    Memory efficiency:
+      - Blocks are parsed once and held as compact pre-expansion arrays.
+      - Frame expansion (np.repeat by count) happens one frame at a time inside
+        the animation update callback; no full frame list is ever stored.
+
     Returns
     -------
     dict : {gas: output_video_path}
@@ -77,43 +82,58 @@ def plot_bubbles(
     if not blocks:
         raise ValueError("No blocks found after parsing/time filtering.")
 
-    # ---- Global stats/centre (robust) ----
-    all_depth_pos = (
-        np.concatenate([b.depth[np.isfinite(b.depth)] for b in blocks if b.depth.size])
-        if any(b.depth.size for b in blocks)
-        else np.array([0.0])
-    )
+    # ---- Global stats via running pass (no concatenation) ----
+    depth_min = np.inf
+    depth_max = -np.inf
+    x_min = np.inf
+    x_max = -np.inf
+    y_min = np.inf
+    y_max = -np.inf
+    diam_max = -np.inf
 
-    # MATLAB z-window logic:
-    if np.isfinite(all_depth_pos).any():
-        dmax = float(np.nanmax(all_depth_pos))
-        dmin = float(np.nanmin(all_depth_pos))
-        depth_min_neg = -dmax  # most negative (deeper)
-        height_dif = dmax - dmin
-        pad = 1.0  # +1 m like the MATLAB code
+    for b in blocks:
+        if b.depth.size:
+            fd = b.depth[np.isfinite(b.depth)]
+            if fd.size:
+                depth_min = min(depth_min, float(fd.min()))
+                depth_max = max(depth_max, float(fd.max()))
+        if b.x.size:
+            fx = b.x[np.isfinite(b.x)]
+            if fx.size:
+                x_min = min(x_min, float(fx.min()))
+                x_max = max(x_max, float(fx.max()))
+        if b.y.size:
+            fy = b.y[np.isfinite(b.y)]
+            if fy.size:
+                y_min = min(y_min, float(fy.min()))
+                y_max = max(y_max, float(fy.max()))
+        if b.size.size:
+            fs = b.size[np.isfinite(b.size)]
+            if fs.size:
+                diam_max = max(diam_max, float(fs.max()))
+
+    # MATLAB z-window logic
+    if np.isfinite(depth_max) and np.isfinite(depth_min):
+        depth_min_neg = -depth_max
+        height_dif = depth_max - depth_min
+        pad = 1.0
         zlim = (depth_min_neg, depth_min_neg + height_dif + pad)
     else:
         zlim = (-10.0, 1.0)
 
-    # Robust XY centre (median) so (0,0) sits at the source-ish location
-    all_x = (
-        np.concatenate([b.x[np.isfinite(b.x)] for b in blocks if b.x.size])
-        if any(b.x.size for b in blocks)
-        else np.array([0.0])
+    # Robust XY centre (midpoint of range; median not needed without full concat)
+    all_x_mid = 0.5 * (x_min + x_max) if np.isfinite(x_min) else 0.0
+    all_y_mid = 0.5 * (y_min + y_max) if np.isfinite(y_min) else 0.0
+    # Use median-of-block-medians as a cheap robust centre
+    global_cx = (
+        float(np.median([np.nanmedian(b.x[np.isfinite(b.x)]) for b in blocks if b.x.size and np.isfinite(b.x).any()]))
+        if recenter else 0.0
     )
-    all_y = (
-        np.concatenate([b.y[np.isfinite(b.y)] for b in blocks if b.y.size])
-        if any(b.y.size for b in blocks)
-        else np.array([0.0])
+    global_cy = (
+        float(np.median([np.nanmedian(b.y[np.isfinite(b.y)]) for b in blocks if b.y.size and np.isfinite(b.y).any()]))
+        if recenter else 0.0
     )
-    global_cx = float(np.nanmedian(all_x)) if (recenter and all_x.size) else 0.0
-    global_cy = float(np.nanmedian(all_y)) if (recenter and all_y.size) else 0.0
-
-    # Global diameter max for consistent color scale
-    diam_candidates = [
-        np.nanmax(b.size) for b in blocks if b.size.size and np.isfinite(b.size).any()
-    ]
-    max_diam = float(np.nanmax(diam_candidates)) if diam_candidates else 1.0
+    max_diam = float(diam_max) if np.isfinite(diam_max) else 1.0
 
     if verbose:
         print(
@@ -138,36 +158,29 @@ def plot_bubbles(
     for gas in gases:
         # Per-gas XY centre if requested
         if recenter and center_mode.lower() == "per-gas":
-            gx_list, gy_list = [], []
-            for b in blocks:
-                m = b.gas == gas
-                if np.any(m):
-                    gx_list.append(b.x[m][np.isfinite(b.x[m])])
-                    gy_list.append(b.y[m][np.isfinite(b.y[m])])
-            gx = np.concatenate(gx_list) if gx_list else np.array([global_cx])
-            gy = np.concatenate(gy_list) if gy_list else np.array([global_cy])
-            cx, cy = float(np.nanmedian(gx)), float(np.nanmedian(gy))
+            gas_cx = float(np.median([
+                np.nanmedian(b.x[b.gas == gas][np.isfinite(b.x[b.gas == gas])])
+                for b in blocks if np.any(b.gas == gas) and np.isfinite(b.x[b.gas == gas]).any()
+            ])) if any(np.any(b.gas == gas) for b in blocks) else global_cx
+            gas_cy = float(np.median([
+                np.nanmedian(b.y[b.gas == gas][np.isfinite(b.y[b.gas == gas])])
+                for b in blocks if np.any(b.gas == gas) and np.isfinite(b.y[b.gas == gas]).any()
+            ])) if any(np.any(b.gas == gas) for b in blocks) else global_cy
+            cx, cy = gas_cx, gas_cy
         else:
             cx, cy = global_cx, global_cy
 
-        # Build frames (vectorized expansion + optional subsample)
-        frames = _build_frames(
-            blocks,
-            gas,
-            jitter_frac=jitter_frac,
-            max_points=max_points_per_frame,
-            cx=cx,
-            cy=cy,
-        )
+        # Compute xy_span from block-level data (recentred), no frame expansion needed
+        xy_span = _xy_span_from_blocks(blocks, gas, cx=cx, cy=cy)
 
+        n_frames = len(blocks)
+        n_nonempty = sum(1 for b in blocks if np.any(b.gas == gas))
         if verbose:
-            total_pts = int(sum(fr.x.size for fr in frames))
-            nonempty = int(sum(1 for fr in frames if fr.x.size))
             print(
-                f"[bubbles] Gas '{gas}': {len(frames)} frames ({nonempty} non-empty), ~{total_pts:,} points"
+                f"[bubbles] Gas '{gas}': {n_frames} frames ({n_nonempty} non-empty blocks)"
             )
 
-        if not frames:
+        if n_nonempty == 0:
             if verbose:
                 print(f"[bubbles] Gas '{gas}': no particles; skipping.")
             continue
@@ -177,7 +190,12 @@ def plot_bubbles(
             print(f"[bubbles] Rendering {gas} → {out_mp4}")
 
         _animate_frames(
-            frames=frames,
+            blocks=blocks,
+            gas=gas,
+            cx=cx,
+            cy=cy,
+            jitter_frac=jitter_frac,
+            max_points=max_points_per_frame,
             out_path=out_mp4,
             fps=fps,
             dpi=dpi,
@@ -185,8 +203,9 @@ def plot_bubbles(
             facecolor=facecolor,
             cmap=cmap,
             edgecolor=edgecolor,
-            clim=(0.0, float(max_diam if np.isfinite(max_diam) else 1.0)),
-            zlim=zlim,  # MATLAB-style zoomed window in negative Z
+            clim=(0.0, float(max_diam)),
+            zlim=zlim,
+            xy_span=xy_span,
             verbose=verbose,
             writer_args=writer_args or {"codec": "h264", "bitrate": 8000},
             gas_label=gas,
@@ -347,71 +366,96 @@ def _fast_float(s: str) -> float:
         return np.nan
 
 
-def _build_frames(
+def _xy_span_from_blocks(
     blocks: List[Block],
     gas: str,
     *,
+    cx: float = 0.0,
+    cy: float = 0.0,
+    pad: float = 0.05,
+) -> float:
+    """
+    Compute the XY axis half-span from block-level (pre-expansion) data.
+
+    Uses the raw source coordinates (recentred by cx/cy) so the full expanded
+    frame arrays never need to be held in memory simultaneously.
+    """
+    span = 0.0
+    for b in blocks:
+        m = b.gas == gas
+        if not np.any(m):
+            continue
+        bx = b.x[m]
+        by = b.y[m]
+        fx = np.abs(bx[np.isfinite(bx)] - cx)
+        fy = np.abs(by[np.isfinite(by)] - cy)
+        if fx.size:
+            span = max(span, float(fx.max()))
+        if fy.size:
+            span = max(span, float(fy.max()))
+    return span * (1.0 + pad) if span > 0 else 1.0
+
+
+def _build_single_frame(
+    block: Block,
+    gas: str,
+    *,
+    rng: np.random.Generator,
     jitter_frac: float = 0.0,
     max_points: Optional[int] = None,
     cx: float = 0.0,
     cy: float = 0.0,
-) -> List[Frame]:
+) -> Frame:
     """
-    Vectorized per-block expansion (repeat by 'count'), optional jitter, optional subsampling.
-    Recenter XY by subtracting (cx, cy). Plot Z = -depth (negative).
+    Expand one Block into a Frame for the given gas type.
+
+    Builds the expanded (repeated-by-count) particle arrays for a single time
+    step only — keeping peak memory proportional to one frame.
     """
-    rng = np.random.default_rng(12345)
-    frames: List[Frame] = []
+    m = block.gas == gas
+    if not np.any(m):
+        return Frame(block.time, np.empty(0), np.empty(0), np.empty(0), np.empty(0), np.empty(0))
 
-    for b in blocks:
-        m = b.gas == gas
-        if not np.any(m):
-            frames.append(
-                Frame(b.time, np.empty(0), np.empty(0), np.empty(0), np.empty(0), np.empty(0))
-            )
-            continue
+    x, y, depth, count, size = (
+        block.x[m], block.y[m], block.depth[m], block.count[m], block.size[m]
+    )
 
-        x, y, depth, count, size = b.x[m], b.y[m], b.depth[m], b.count[m], b.size[m]
+    keep = (
+        np.isfinite(size) & (count > 0) & np.isfinite(x) & np.isfinite(y) & np.isfinite(depth)
+    )
+    if not np.any(keep):
+        return Frame(block.time, np.empty(0), np.empty(0), np.empty(0), np.empty(0), np.empty(0))
 
-        keep = (
-            np.isfinite(size) & (count > 0) & np.isfinite(x) & np.isfinite(y) & np.isfinite(depth)
-        )
-        if not np.any(keep):
-            frames.append(
-                Frame(b.time, np.empty(0), np.empty(0), np.empty(0), np.empty(0), np.empty(0))
-            )
-            continue
+    x, y, depth, count, size = x[keep], y[keep], depth[keep], count[keep], size[keep]
 
-        x, y, depth, count, size = x[keep], y[keep], depth[keep], count[keep], size[keep]
+    reps = count.astype(np.int64)
+    idx = np.repeat(np.arange(reps.size, dtype=np.int64), reps)
+    X = x[idx] - cx
+    Y = y[idx] - cy
+    Z = -depth[idx]
+    S = size[idx]
 
-        # Repeat each row by 'count' using np.repeat
-        reps = count.astype(np.int64)
-        idx = np.repeat(np.arange(reps.size, dtype=np.int64), reps)
-        X = x[idx] - cx
-        Y = y[idx] - cy
-        Z = -depth[idx]  # MATLAB-style: negative Z (0 is near the surface)
-        S = size[idx]
+    if jitter_frac > 0.0 and X.size:
+        s_med = float(np.nanmedian(S)) if np.isfinite(S).any() else 1.0
+        jitter = jitter_frac * s_med
+        X = X + (rng.random(X.size) - 0.5) * 2.0 * jitter
+        Y = Y + (rng.random(Y.size) - 0.5) * 2.0 * jitter
 
-        # Optional jitter to de-overlap (scaled by median size)
-        if jitter_frac > 0.0 and X.size:
-            s_med = float(np.nanmedian(S)) if np.isfinite(S).any() else 1.0
-            jitter = jitter_frac * s_med
-            X = X + (rng.random(X.size) - 0.5) * 2.0 * jitter
-            Y = Y + (rng.random(Y.size) - 0.5) * 2.0 * jitter
+    if max_points is not None and X.size > max_points:
+        sel = rng.choice(X.size, size=max_points, replace=False)
+        X, Y, Z, S = X[sel], Y[sel], Z[sel], S[sel]
 
-        # Optional random subsample for speed
-        if max_points is not None and X.size > max_points:
-            sel = rng.choice(X.size, size=max_points, replace=False)
-            X, Y, Z, S = X[sel], Y[sel], Z[sel], S[sel]
-
-        frames.append(Frame(time=b.time, x=X, y=Y, z=Z, size=S, color=S))
-
-    return frames
+    return Frame(time=block.time, x=X, y=Y, z=Z, size=S, color=S)
 
 
 def _animate_frames(
     *,
-    frames: List[Frame],
+    blocks: List[Block],
+    gas: str,
+    cx: float,
+    cy: float,
+    jitter_frac: float,
+    max_points: Optional[int],
     out_path: str,
     fps: int,
     dpi: int,
@@ -421,82 +465,60 @@ def _animate_frames(
     edgecolor: str,
     clim: Tuple[float, float],
     zlim: Tuple[float, float],
+    xy_span: float,
     verbose: bool,
     writer_args: Dict,
     gas_label: str,
     size_scale: float,
 ) -> None:
-    # --- Shared XY limits: identical numeric range for East/North, centered on 0 ---
-    def shared_xy_limits(
-        frames: List[Frame], pad: float = 0.05
-    ) -> Tuple[Tuple[float, float], Tuple[float, float], float]:
-        xs = (
-            np.concatenate([fr.x[np.isfinite(fr.x)] for fr in frames if fr.x.size])
-            if any(fr.x.size for fr in frames)
-            else np.array([])
-        )
-        ys = (
-            np.concatenate([fr.y[np.isfinite(fr.y)] for fr in frames if fr.y.size])
-            if any(fr.y.size for fr in frames)
-            else np.array([])
-        )
-        if xs.size + ys.size == 0:
-            span = 1.0
-        else:
-            span = float(np.nanmax(np.abs(np.concatenate([xs, ys]))))
-            span *= 1.0 + pad  # breathing room
-        return (-span, span), (-span, span), span
+    """
+    Render an animation by building one frame at a time inside the update callback.
 
-    xlim, ylim, xy_span = shared_xy_limits(frames)
+    No full list of expanded Frame objects is ever held simultaneously; peak
+    memory is proportional to one frame's particle count.
+    """
+    rng = np.random.default_rng(12345)
+    n_frames = len(blocks)
 
-    # --- Figure & layout (manual margins beat constrained_layout for 3D) ---
-    fig = plt.figure(figsize=figsize, facecolor=facecolor)  # use requested facecolor
-    # Leave space on the right for colorbar and extra margin so 3D box never touches edges
+    xlim = (-xy_span, xy_span)
+    ylim = (-xy_span, xy_span)
+
+    # --- Figure & layout ---
+    fig = plt.figure(figsize=figsize, facecolor=facecolor)
     fig.subplots_adjust(left=0.12, right=0.86, bottom=0.12, top=0.92)
 
     ax = fig.add_subplot(111, projection="3d", proj_type="persp")
     ax.set_facecolor(facecolor)
 
-    # Remove pane fills (no tinted planes); keep faint edges
     try:
         for pane in (ax.xaxis.pane, ax.yaxis.pane, ax.zaxis.pane):
-            pane.set_facecolor((1.0, 1.0, 1.0, 0.0))  # transparent
-            pane.set_edgecolor((0.80, 0.80, 0.80, 1.0))  # subtle borders
+            pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+            pane.set_edgecolor((0.80, 0.80, 0.80, 1.0))
     except Exception:
         pass
 
-    # Axis cosmetics
     ax.grid(False)
     ax.set_xlabel("East (m)", fontweight="bold", labelpad=12)
     ax.set_ylabel("North (m)", fontweight="bold", labelpad=12)
-    ax.set_zlabel("Depth (m)", fontweight="bold", labelpad=26)  # push label away from markers
-    ax.tick_params(pad=7)  # move tick labels off the axes a touch
+    ax.set_zlabel("Depth (m)", fontweight="bold", labelpad=26)
+    ax.tick_params(pad=7)
 
-    # Limits & aspect
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
-    ax.set_zlim(*zlim)  # negative values; surface near 0
-    # Keep X:Y numeric scales identical; Z relative to XY span
+    ax.set_zlim(*zlim)
     z_span = max(1e-6, (zlim[1] - zlim[0]))
-    # 3D aspect uses relative data ranges; XY equal, Z scaled to its range vs XY
     ax.set_box_aspect((1.0, 1.0, z_span / (2.0 * xy_span) if xy_span > 0 else 1.0))
-    # Lock limits to prevent autoscale drift during updates
     ax.set_autoscale_on(False)
-
-    # Viewing angle
     ax.view_init(elev=20, azim=-30)
 
-    # Scatter artist (start empty)
     scat = ax.scatter([], [], [], s=[], c=[], cmap=cmap, edgecolors=edgecolor, linewidths=0.2)
 
-    # Dedicated colorbar axis (keeps box inside figure margins)
-    cax = fig.add_axes([0.88, 0.18, 0.028, 0.64])  # [left, bottom, width, height]
+    cax = fig.add_axes([0.88, 0.18, 0.028, 0.64])
     mappable = plt.cm.ScalarMappable(cmap=cmap)
     mappable.set_clim(*clim)
     cb = plt.colorbar(mappable, cax=cax)
     cb.set_label("Bubble diameter (a.u.)")
 
-    # Title
     title = ax.set_title(f"{gas_label}", pad=10)
 
     def init():
@@ -506,25 +528,33 @@ def _animate_frames(
         return scat, title
 
     def update(i):
-        fr = frames[i]
+        # Build this frame on demand — previous frame's arrays go out of scope
+        fr = _build_single_frame(
+            blocks[i], gas, rng=rng, jitter_frac=jitter_frac, max_points=max_points, cx=cx, cy=cy
+        )
         scat._offsets3d = (fr.x, fr.y, fr.z)
         scat.set_sizes(_diameter_to_ms(fr.size, scale=size_scale))
-        scat.set_array(fr.color)  # for colormap
+        scat.set_array(fr.color)
         if not pd.isna(fr.time):
             title.set_text(f"{gas_label} — {pd.to_datetime(fr.time).strftime('%Y-%m-%d %H:%M:%S')}")
         else:
             title.set_text(f"{gas_label}")
-        if verbose and (i % 10 == 0 or i == len(frames) - 1):
-            print(f"[bubbles]   frame {i + 1}/{len(frames)}")
+        if verbose and (i % 10 == 0 or i == n_frames - 1):
+            print(f"[bubbles]   frame {i + 1}/{n_frames}")
         return scat, title
 
     anim = FuncAnimation(
-        fig, update, init_func=init, frames=len(frames), interval=1000 / fps, blit=False
+        fig,
+        update,
+        init_func=init,
+        frames=n_frames,
+        interval=1000 / fps,
+        blit=False,
+        cache_frame_data=False,  # do not cache expanded arrays between frames
     )
 
     writer = FFMpegWriter(fps=fps, **writer_args)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    # Save with requested facecolor
     anim.save(out_path, writer=writer, dpi=dpi, savefig_kwargs={"facecolor": facecolor})
     if verbose:
         print(f"[bubbles] Saved: {out_path}")
@@ -545,9 +575,6 @@ def _diameter_to_ms(d: np.ndarray, scale: float = 0.6) -> np.ndarray:
     if not np.isfinite(med) or med <= 0:
         med = 1.0
 
-    # Normalise and soften extremes
     s = np.clip(d / med, 0.05, 6.0)
-
-    # Base size ~ 8pt at median; 'scale' shrinks/grows globally
     pts2 = (8.0 * np.sqrt(s) * scale) ** 2  # points^2
     return pts2

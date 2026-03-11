@@ -808,9 +808,11 @@ def plot_bars(
             month_levels=month_levels,
             years=years_in_data,
         )
-        # preserve user-supplied region order
+        # preserve user-supplied region / variable order
         if explicit is None and role_dim == "region":
             explicit = region_names
+        if explicit is None and role_dim == "variable":
+            explicit = list(variables)
 
         # role-specific present levels:
         idx = {"facet": 0, "x": 1, "hue": 2}[role_name]
@@ -1364,9 +1366,11 @@ def plot_box(
             month_levels=month_levels,
             years=years_in_data,
         )
-        # preserve user-supplied region order
+        # preserve user-supplied region / variable order
         if explicit is None and role_dim == "region":
             explicit = region_names
+        if explicit is None and role_dim == "variable":
+            explicit = list(variables)
 
         idx = {"facet": 0, "x": 1, "hue": 2}[role_name]
         present = sorted({k[idx] for k in bins.keys()})
