@@ -298,23 +298,29 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
 
     def _open(engine: str) -> xr.Dataset:
         print(f"[io] Trying engine='{engine}' for open_mfdataset …")
+        warnings.filterwarnings(
+            "ignore",
+            message="numpy.ndarray size changed",
+            category=RuntimeWarning,
+        )
         return xr.open_mfdataset(
             paths,
             combine="nested",
             concat_dim="time",
             decode_times=False,  # we coerce below
-            engine=engine,  # 'scipy' (netCDF3), 'netcdf4' (C lib), 'h5netcdf' (HDF5)
-            chunks={"time": 168},  # dask-friendly weekly-ish chunks; OK for scipy too
-            parallel=True,
+            engine=engine,  # 'netcdf4' (C lib), 'h5netcdf' (HDF5), 'scipy' (netCDF3)
+            chunks={"time": 168},  # dask-friendly weekly-ish chunks
+            parallel=False,  # parallel=True deadlocks with O(1000) files on threaded scheduler
             preprocess=_preprocess_one,
             data_vars="minimal",
             coords="minimal",
             compat="override",
+            join="override",  # siglev/siglay coords may vary across files
             combine_attrs="override",
         )
 
-    # Prefer 'scipy' for classic NetCDF; try others if needed
-    for engine in ("scipy", "netcdf4", "h5netcdf"):
+    # Prefer 'netcdf4' for NetCDF4/HDF5 files (FVCOM output); scipy is NetCDF3 only
+    for engine in ("netcdf4", "h5netcdf", "scipy"):
         try:
             ds = _open(engine)
             print(f"[io] Using engine='{engine}'.")
@@ -322,11 +328,11 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
         except Exception as e:
             print(f"[io] Engine '{engine}' failed: {e}")
     else:
-        # Final fallback: sequential open with scipy
-        print("[io] Falling back to sequential open with engine='scipy' …")
+        # Final fallback: sequential open with netcdf4
+        print("[io] Falling back to sequential open with engine='netcdf4' …")
         datasets = []
         for p in paths:
-            dsi = xr.open_dataset(p, decode_times=False, engine="scipy")
+            dsi = xr.open_dataset(p, decode_times=False, engine="netcdf4")
             dsi = _preprocess_one(dsi)
             datasets.append(dsi)
         ds = xr.concat(

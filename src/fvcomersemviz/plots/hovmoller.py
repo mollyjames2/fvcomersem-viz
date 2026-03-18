@@ -47,6 +47,44 @@ def _interp_profile_to_z(zvec: np.ndarray, avals: np.ndarray, z_levels: np.ndarr
     return np.interp(zq, z_s, a_s)
 
 
+def _siglev_z_from_siglay_z(z_siglay: xr.DataArray, ds: xr.Dataset) -> xr.DataArray:
+    """
+    Derive depth (m) at siglev interfaces by linear interpolation in sigma space.
+
+    Since z is linear in sigma (z = zeta + (h + zeta) * sigma), we can map from
+    siglay midpoints to siglev interfaces by interpolating along the sigma axis.
+
+    Parameters
+    ----------
+    z_siglay : xr.DataArray
+        Depth at siglay midpoints, shape (time, siglay).
+    ds : xr.Dataset
+        Source dataset containing 1-D or 2-D ``siglay`` and ``siglev`` coordinate arrays.
+
+    Returns
+    -------
+    xr.DataArray
+        Depth at siglev interfaces, shape (time, siglev).
+    """
+    # Representative 1-D sigma arrays (use first node column if 2-D)
+    sig_lay = np.asarray(ds["siglay"]).reshape(ds.dims["siglay"], -1)[:, 0]
+    sig_lev = np.asarray(ds["siglev"]).reshape(ds.dims["siglev"], -1)[:, 0]
+
+    z_vals = z_siglay.values  # (time, siglay)
+    # sigma goes surface (~0) → bottom (~-1); negate to get ascending for np.interp
+    order = np.argsort(-sig_lay)
+
+    def _interp_row(col: np.ndarray) -> np.ndarray:
+        return np.interp(-sig_lev, -sig_lay[order], col[order])
+
+    result = np.apply_along_axis(_interp_row, axis=1, arr=z_vals)
+    return xr.DataArray(
+        result,
+        dims=["time", "siglev"],
+        coords={"time": z_siglay["time"], "siglev": ("siglev", sig_lev)},
+    )
+
+
 # ---------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------
@@ -153,12 +191,14 @@ def station_hovmoller(
 
     Notes
     -----
-    - If a variable lacks either ``'time'`` or ``'siglay'``, it is skipped.
+    - If a variable lacks ``'time'`` or both ``'siglay'`` and ``'siglev'``, it is skipped.
+      Variables on ``siglev`` (e.g. ``km``, ``kh``) are handled alongside ``siglay`` variables.
     - If neither ``'node'`` nor ``'nele'`` can be located for a station, that station-variable
       pair is skipped.
     - In ``axis='z'`` mode, vertical coordinates are obtained via ``ensure_z_from_sigma``:
       picks ``'z'`` (node-centered) or ``'z_nele'`` (element-centered), aligned to the same
-      spatial index used for the variable slice, before interpolation.
+      spatial index used for the variable slice, before interpolation. For ``siglev`` variables,
+      the siglay-based z column is interpolated to siglev interfaces via ``_siglev_z_from_siglay_z``.
     - Robust colour limits are computed only when no norm or explicit vmin/vmax are present.
     """
     if axis not in ("sigma", "z"):
@@ -181,6 +221,33 @@ def station_hovmoller(
             nele_idx = nearest_index_for_dim(ds_t, lat, lon, "nele")
         except Exception:
             nele_idx = None
+
+        # Pre-compute vertical coordinate columns once per station (not per variable).
+        # For node vars: isel first so z is (time, siglay) not (time, siglay, all_nodes).
+        z_node_col = None
+        z_nele_col = None
+        if axis == "z":
+            if node_idx is not None:
+                try:
+                    _ds_node = ds_t.isel(node=node_idx)
+                    _ds_zn = ensure_z_from_sigma(
+                        _ds_node, compute_elements=False, verbose=verbose
+                    )
+                    z_node_col = _ds_zn.get("z")  # (time, siglay)
+                except Exception as e:
+                    _vprint(verbose, f"[hovmoller:{name}] node z pre-compute failed: {e}")
+            if nele_idx is not None:
+                try:
+                    _ds_z_full = ensure_z_from_sigma(
+                        ds_t, compute_elements=True, verbose=verbose
+                    )
+                    if "z_nele" in _ds_z_full:
+                        z_nele_col = _ds_z_full["z_nele"].isel(nele=nele_idx)  # (time, siglay)
+                    # fallback node col if the efficient path above failed
+                    if z_node_col is None and "z" in _ds_z_full:
+                        z_node_col = _ds_z_full["z"].isel(node=0)
+                except Exception as e:
+                    _vprint(verbose, f"[hovmoller:{name}] nele z pre-compute failed: {e}")
 
         for var in variables:
             _vprint(verbose, f"[hovmoller:{name}] {var} ({axis})")
@@ -213,12 +280,16 @@ def station_hovmoller(
             if "time" not in da.dims:
                 _vprint(verbose, f"[hovmoller:{name}] '{var}' has no time dim; skip.")
                 continue
-            if "siglay" not in da.dims:
-                _vprint(verbose, f"[hovmoller:{name}] '{var}' has no 'siglay' dim; skip.")
+            if "siglay" in da.dims:
+                vert_dim = "siglay"
+            elif "siglev" in da.dims:
+                vert_dim = "siglev"
+            else:
+                _vprint(verbose, f"[hovmoller:{name}] '{var}' has no 'siglay'/'siglev' dim; skip.")
                 continue
 
-            # (time, siglay)
-            A = da.transpose("time", "siglay")
+            # (time, vert_dim)
+            A = da.transpose("time", vert_dim)
             t = pd.to_datetime(A["time"].values)
 
             # per-variable style (fallbacks)
@@ -228,12 +299,12 @@ def station_hovmoller(
             vmax_eff = style_get(var, styles, "vmax", vmax)
 
             if axis == "sigma":
-                if "siglay" in A.coords and getattr(A["siglay"], "ndim", 0) == 1:
-                    y = A["siglay"].values
-                elif "siglay" in ds_t and getattr(ds_t["siglay"], "ndim", 0) == 1:
-                    y = ds_t["siglay"].values
+                if vert_dim in A.coords and getattr(A[vert_dim], "ndim", 0) == 1:
+                    y = A[vert_dim].values
+                elif vert_dim in ds_t and getattr(ds_t[vert_dim], "ndim", 0) == 1:
+                    y = ds_t[vert_dim].values
                 else:
-                    y = np.arange(A.sizes["siglay"])
+                    y = np.arange(A.sizes[vert_dim])
 
                 # decide colour limits (norm wins; else vmin/vmax; else robust)
                 vvmin, vvmax = vmin_eff, vmax_eff
@@ -264,43 +335,56 @@ def station_hovmoller(
                 plt.close(fig)
                 _vprint(verbose, f"[hovmoller:{name}] saved {fname}")
 
-            else:  # axis == 'z'
-                ds_z = ensure_z_from_sigma(ds_t, verbose=verbose)
-                if "z" not in ds_z and "z_nele" not in ds_z:
+            else:  # axis == ‘z’
+                # Use pre-computed z columns (built once per station, before this loop)
+                if pick_dim == "node" and z_node_col is not None:
+                    z_col = z_node_col
+                elif pick_dim == "nele" and z_nele_col is not None:
+                    z_col = z_nele_col
+                elif z_node_col is not None:
+                    z_col = z_node_col  # fallback (e.g. pick_dim is None)
+                elif z_nele_col is not None:
+                    z_col = z_nele_col  # fallback
+                else:
                     _vprint(
                         verbose,
                         f"[hovmoller:{name}] cannot build vertical coords; skipping.",
                     )
                     continue
 
-                # choose column’s z profile aligned with the same index we sliced above
-                if pick_dim == "node" and "z" in ds_z and idx is not None:
-                    z_col = ds_z["z"].isel(node=idx)  # (time, siglay)
-                elif pick_dim == "nele" and "z_nele" in ds_z and idx is not None:
-                    z_col = ds_z["z_nele"].isel(nele=idx)  # (time, siglay)
+                # For siglev variables (e.g. km, kh), interpolate the siglay-based z
+                # column to siglev interfaces so both arrays share the same vertical dim.
+                if vert_dim == "siglev":
+                    try:
+                        z_col_v = _siglev_z_from_siglay_z(z_col, ds_t)
+                    except Exception as e:
+                        _vprint(
+                            verbose,
+                            f"[hovmoller:{name}] siglev z derivation failed for ‘{var}’: {e}; skip.",
+                        )
+                        continue
                 else:
-                    # fallback: first node/element if dims are missing
-                    z_col = ds_z["z"].isel(node=0) if "z" in ds_z else ds_z["z_nele"].isel(nele=0)
+                    z_col_v = z_col  # already on siglay
 
                 # auto z grid if not supplied
                 if z_levels is None:
-                    zmin = float(np.nanmin(z_col.values))
+                    zmin = float(np.nanmin(z_col_v.values))
                     zlev = np.linspace(zmin, 0.0, 60)
                 else:
                     zlev = np.asarray(z_levels, dtype=float)
                 zlev = np.sort(zlev)
 
-                # interpolate (time, siglay) -> (time, z)
+                # interpolate (time, vert_dim) -> (time, z)
                 hov = xr.apply_ufunc(
                     _interp_profile_to_z,
-                    z_col,
-                    A,  # both (time, siglay)
-                    input_core_dims=[["siglay"], ["siglay"]],
+                    z_col_v,
+                    A,  # both (time, vert_dim)
+                    input_core_dims=[[vert_dim], [vert_dim]],
                     output_core_dims=[["z"]],
                     vectorize=True,
                     dask="parallelized",
                     output_dtypes=[float],
-                    dask_gufunc_kwargs={"output_sizes": {"z": zlev.size}},
+                    dask_gufunc_kwargs={"output_sizes": {"z": zlev.size}, "allow_rechunk": True},
                     kwargs={"z_levels": zlev},
                 ).assign_coords(z=("z", zlev))
 
