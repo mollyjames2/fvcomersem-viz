@@ -23,6 +23,7 @@ dependencies:
   - pyvistaqt         # offscreen/movie support (ok on headless too)
   - imageio-ffmpeg    # writer used by PyVista's movie helper
   - ffmpeg            # system ffmpeg (so matplotlib writer also works)
+  - cmocean
 
   # Geospatial stack
   - geopandas

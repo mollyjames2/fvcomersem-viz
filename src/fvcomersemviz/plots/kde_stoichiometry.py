@@ -130,6 +130,7 @@ def kde_stoichiometry_2x2(
     sample_max: Optional[int] = 200_000,
     hist_sigma: float = 1.2,
     random_seed: Optional[int] = 12345,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Render a 2×2 **stoichiometry vs variable** density figure for a functional group,
@@ -224,6 +225,12 @@ def kde_stoichiometry_2x2(
         Gaussian smoothing (in grid cells) applied to the 2D histogram when `method="hist"`.
     random_seed : int, optional (default 12345)
         Seed for reproducible subsampling and underlay selection.
+    average_by : str, optional
+        Temporal averaging period applied before density estimation. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -249,7 +256,7 @@ def kde_stoichiometry_2x2(
     pc_name = f"{group}_PC"
 
     # time filter only once (depth selection applied per side)
-    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date)
+    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date, average_by=average_by)
 
     # depth slices
     ds_surf = select_depth(ds_t, "surface", verbose=verbose)

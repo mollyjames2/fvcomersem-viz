@@ -27,6 +27,7 @@ from ..utils import (
     depth_tag,
     build_time_window_label,
     style_get,
+    resolve_cmap,
     select_depth,
     select_da_by_z,
     build_triangulation,
@@ -196,6 +197,13 @@ def _choose_instants(
 ) -> List[Tuple[pd.Timestamp, xr.DataArray]]:  # (chosen_time, instantaneous-DA)
     if "time" not in da.dims:
         return [(pd.Timestamp("NaT"), da)]
+    times = pd.to_datetime(da["time"].values)
+    if not times.is_unique:
+        # Drop duplicate timestamps, keeping the first occurrence
+        _, keep_idx = np.unique(times, return_index=True)
+        da = da.isel(time=keep_idx)
+        times = pd.to_datetime(da["time"].values)
+
     out = []
     for want in desired:
         _one = da.sel(time=want, method=method)
@@ -251,6 +259,7 @@ def animate_timeseries(
     dpi: int = 150,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
+    average_by: Optional[str] = None,
 ) -> List[str]:
     """
     Create **growing-line animations** of time series for variables, scoped to the
@@ -328,6 +337,14 @@ def animate_timeseries(
         Per-series line style overrides (e.g., `styles["chl"]["line_color"] = "C3"`).
     verbose : bool, default True
         Print progress and skip reasons.
+    average_by : str, optional
+        Temporal averaging period applied before animating. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Note: ``frequency`` selects one frame per period (snapshot sampling);
+        ``average_by`` computes period means before any frame selection.
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -413,6 +430,7 @@ def animate_timeseries(
         years_l,
         start_date,
         end_date,
+        average_by=average_by,
     )
 
     # resolve variables (native or via GROUPS)
@@ -769,6 +787,7 @@ def animate_maps(
     fps: int = 10,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
+    average_by: Optional[str] = None,
 ) -> List[str]:
     """
     Animate **maps over time** for one or more variables on a triangular mesh,
@@ -861,6 +880,14 @@ def animate_maps(
         Per-variable overrides: "cmap", "norm", "vmin", "vmax", "shading".
     verbose : bool, default True
         Print progress and skip reasons.
+    average_by : str, optional
+        Temporal averaging period applied before animating. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Note: ``frequency`` selects one frame per period (snapshot sampling);
+        ``average_by`` computes period means before any frame selection.
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -895,7 +922,7 @@ def animate_maps(
 
     # select depth + time window
     ds_depth = select_depth(ds, depth, verbose=verbose)
-    ds_t = filter_time(ds_depth, months_l, years_l, start_date, end_date)
+    ds_t = filter_time(ds_depth, months_l, years_l, start_date, end_date, average_by=average_by)
 
     # triangulation from base ds (expects lon/lat + connectivity)
     tri = build_triangulation(ds)
@@ -981,7 +1008,7 @@ def animate_maps(
                 frames = [(pd.Timestamp("NaT"), da)]
 
         # per-var styling
-        cmap_eff = style_get(var, styles, "cmap", cmap)
+        cmap_eff = resolve_cmap(style_get(var, styles, "cmap", cmap))
         norm_eff = style_get(var, styles, "norm", None)
         vmin_style = style_get(var, styles, "vmin", None)
         vmax_style = style_get(var, styles, "vmax", None)

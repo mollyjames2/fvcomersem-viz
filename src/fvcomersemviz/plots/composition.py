@@ -81,6 +81,7 @@ def composition_surface_bottom(
     dpi: int = 150,
     figsize: Tuple[float, float] = (9, 6),
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Plot a single stacked-bar figure comparing **surface vs bottom composition**
@@ -128,6 +129,12 @@ def composition_surface_bottom(
         Figure size in inches.
     verbose : bool, default False
         Print progress (including saved path).
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -142,7 +149,7 @@ def composition_surface_bottom(
       magnitudes matter.
     """
     # time & scope
-    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date)
+    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date, average_by=average_by)
     ds_scoped = apply_scope(ds_t, region=region, station=station, verbose=verbose)
 
     # variables present
@@ -214,6 +221,7 @@ def composition_depth_average_single(
     dpi: int = 150,
     figsize: Tuple[float, float] = (7, 5),
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Plot a single stacked-bar figure showing **depth-averaged composition**
@@ -260,6 +268,12 @@ def composition_depth_average_single(
         Figure size in inches.
     verbose : bool, default False
         Print progress (including saved path).
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -274,7 +288,7 @@ def composition_depth_average_single(
     - Fractions sum to 1.0 within each bar; missing variables are tolerated.
     """
     # time & scope
-    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date)
+    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date, average_by=average_by)
     ds_scoped = apply_scope(ds_t, region=region, station=station, verbose=verbose)
 
     # variables present
@@ -355,6 +369,7 @@ def composition_at_depth_single(
     dpi: int = 150,
     figsize: Tuple[float, float] = (7, 5),
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Plot a single stacked-bar figure showing **composition at a fixed absolute depth**.
@@ -403,6 +418,12 @@ def composition_at_depth_single(
         Figure size in inches.
     verbose : bool, default False
         Print progress (including saved path).
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -423,7 +444,7 @@ def composition_at_depth_single(
       (e.g., DCM or sampling depths).
     """
     # time & scope
-    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date)
+    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date, average_by=average_by)
     ds_scoped = apply_scope(ds_t, region=region, station=station, verbose=verbose)
 
     # variables present
@@ -510,6 +531,7 @@ def composition_fraction_timeseries(
     figsize_per_panel: Tuple[float, float] = (10, 3.2),  # width, height per panel
     dpi: int = 150,
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Time-resolved community composition (fractions) for Phytoplankton and Zooplankton.
@@ -596,6 +618,12 @@ def composition_fraction_timeseries(
         Output figure resolution.
     verbose : bool, default False
         If True, print progress and skip reasons (unresolvable variables, empty masks, etc.).
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -882,7 +910,8 @@ def composition_fraction_timeseries(
     # -------- select depth + time window once --------
     ds_depth = select_depth(ds, depth, verbose=verbose)
     ds_t = filter_time(
-        ds_depth, months=months, years=years, start_date=start_date, end_date=end_date
+        ds_depth, months=months, years=years, start_date=start_date, end_date=end_date,
+        average_by=average_by,
     )
 
     # -------- panels by scope --------

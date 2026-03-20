@@ -18,6 +18,150 @@ import xarray as xr
 
 
 # --------------------------
+# Temporal resampling helpers
+# --------------------------
+
+# Approximate timedelta for each pandas resample alias, used to detect when
+# the requested averaging period is finer than the data's actual time step.
+_ALIAS_APPROX_TIMEDELTA: dict = {
+    "h":  pd.Timedelta("1h"),
+    "D":  pd.Timedelta("1D"),
+    "W":  pd.Timedelta("7D"),
+    "MS": pd.Timedelta("28D"),   # conservative lower bound (shortest month)
+    "YS": pd.Timedelta("365D"),
+}
+
+_AVERAGE_BY_ALIASES: dict = {
+    # hourly
+    "h": "h", "hour": "h", "hours": "h", "hourly": "h", "1h": "h",
+    # daily
+    "d": "D", "day": "D", "days": "D", "daily": "D", "1d": "D",
+    # weekly
+    "w": "W", "week": "W", "weeks": "W", "weekly": "W",
+    # monthly
+    "m": "MS", "ms": "MS", "month": "MS", "months": "MS", "monthly": "MS",
+    # yearly
+    "y": "YS", "ys": "YS", "year": "YS", "years": "YS", "yearly": "YS", "annual": "YS",
+}
+
+
+def normalise_average_by(average_by: str) -> str:
+    """
+    Normalise a human-friendly frequency string to a pandas resample alias.
+
+    Accepted values (case-insensitive): ``"hour"``, ``"day"``, ``"week"``,
+    ``"month"``, ``"year"`` and common aliases such as ``"daily"``,
+    ``"monthly"``, ``"annual"``, ``"D"``, ``"MS"``, ``"YS"``, etc.
+
+    Parameters
+    ----------
+    average_by : str
+        Human-friendly period name (case-insensitive). Accepted values:
+        ``"hour"`` / ``"hourly"``; ``"day"`` / ``"daily"``; ``"week"`` /
+        ``"weekly"``; ``"month"`` / ``"monthly"``; ``"year"`` / ``"yearly"``
+        / ``"annual"``; or any matching pandas alias (``"h"``, ``"D"``,
+        ``"MS"``, ``"YS"``).
+
+    Returns
+    -------
+    str
+        A pandas-compatible resample frequency alias (e.g. ``"D"``, ``"MS"``,
+        ``"YS"``).
+
+    Raises
+    ------
+    ValueError
+        If *average_by* is not recognised.
+    """
+    key = average_by.strip().lower()
+    alias = _AVERAGE_BY_ALIASES.get(key)
+    if alias is None:
+        raise ValueError(
+            f"average_by={average_by!r} not recognised. "
+            "Use one of: hour, day, week, month, year (or aliases daily, monthly, annual, …)."
+        )
+    return alias
+
+
+def resample_time(
+    ds: xr.Dataset,
+    freq: str,
+    method: str = "mean",
+) -> xr.Dataset:
+    """
+    Resample the time-varying variables in *ds* to a coarser frequency.
+
+    Static variables (those without a ``time`` dimension) are preserved
+    unchanged so that grid coordinates, bathymetry, connectivity, etc. are
+    not affected.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Source dataset with a ``time`` dimension.
+    freq : str
+        Target frequency — any value accepted by :func:`normalise_average_by`
+        (e.g. ``"month"``, ``"day"``, ``"MS"``).
+    method : {"mean", "sum", "median"}, default "mean"
+        Aggregation applied within each period.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset whose time-varying variables are resampled; static variables
+        and non-time coordinates are re-attached unchanged. If *freq* is finer
+        than the data's own time step, the dataset is returned **unchanged** and
+        a :class:`UserWarning` is issued.
+    """
+    freq_alias = normalise_average_by(freq)
+
+    # Warn if the requested period is clearly finer than the data time step.
+    # A factor-of-2 tolerance avoids false positives when target and data periods
+    # are approximately equal (e.g. monthly data averaged by month: 28D alias vs
+    # ~30D actual step, or yearly data averaged by year on a leap year).
+    if "time" in ds.coords and ds.sizes.get("time", 0) > 1:
+        times = pd.DatetimeIndex(ds["time"].values)
+        median_dt = pd.to_timedelta(np.median(np.diff(times.asi8)), unit="ns")
+        target_dt = _ALIAS_APPROX_TIMEDELTA.get(freq_alias)
+        if target_dt is not None and target_dt < median_dt / 2:
+            warnings.warn(
+                f"average_by={freq!r} requests ~{target_dt} period means but the "
+                f"data time step is ~{median_dt}. Resampling to a finer resolution "
+                f"than the data produces mostly NaN. Skipping average_by.",
+                UserWarning,
+                stacklevel=3,
+            )
+            return ds
+
+    time_vars = [v for v in ds.data_vars if "time" in ds[v].dims]
+    static_vars = [v for v in ds.data_vars if "time" not in ds[v].dims]
+
+    if not time_vars:
+        return ds
+
+    rs = ds[time_vars].resample(time=freq_alias)
+    if method == "mean":
+        ds_rs = rs.mean()
+    elif method == "sum":
+        ds_rs = rs.sum()
+    elif method == "median":
+        ds_rs = rs.median()
+    else:
+        raise ValueError(f"method={method!r} not supported. Use: mean, sum, median.")
+
+    # Re-attach static data variables
+    for v in static_vars:
+        ds_rs[v] = ds[v]
+
+    # Re-attach static (non-time) coordinates
+    for c in ds.coords:
+        if c not in ds_rs.coords and "time" not in ds[c].dims:
+            ds_rs = ds_rs.assign_coords({c: ds[c]})
+
+    return ds_rs
+
+
+# --------------------------
 # Time filtering
 # --------------------------
 def filter_time(
@@ -27,10 +171,34 @@ def filter_time(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     time_var: str = "time",
+    average_by: Optional[str] = None,
 ) -> xr.Dataset:
-    """Return a time-filtered view of `ds` using any combination of filters.
+    """Return a time-filtered (and optionally resampled) view of *ds*.
 
-    Works whether `time` is a dimension or only a coordinate.
+    Filtering is applied first (months/years/date bounds), then if *average_by*
+    is given the result is passed through :func:`resample_time` so that each
+    period is represented by its mean.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+    months : iterable of int, optional
+    years : iterable of int, optional
+    start_date, end_date : str, optional
+        Inclusive ISO date bounds.
+    time_var : str, default "time"
+    average_by : str, optional
+        Temporal averaging period applied **after** the time filter.
+        Resamples the filtered dataset to period means using
+        ``xr.Dataset.resample().mean()``. Static variables (coordinates,
+        mesh geometry) are excluded from the resampling so grid arrays are
+        preserved unchanged.
+        Accepted values (case-insensitive): ``"hour"`` / ``"hourly"``,
+        ``"day"`` / ``"daily"``, ``"week"`` / ``"weekly"``,
+        ``"month"`` / ``"monthly"``, ``"year"`` / ``"yearly"`` /
+        ``"annual"``. Default ``None`` (no averaging).
+
+    Works whether ``time`` is a dimension or only a coordinate.
     """
     if time_var not in ds.dims and time_var not in ds.coords:
         # nothing to filter
@@ -64,9 +232,14 @@ def filter_time(
 
     # If time is a dimension, boolean-index it; if it's only a coord, select by labels
     if time_var in ds.dims:
-        return ds.isel({time_var: mask})
+        ds_out = ds.isel({time_var: mask})
     else:
-        return ds.sel({time_var: tindex[mask]})
+        ds_out = ds.sel({time_var: tindex[mask]})
+
+    if average_by is not None:
+        ds_out = resample_time(ds_out, average_by)
+
+    return ds_out
 
 
 # --------------------------

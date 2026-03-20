@@ -198,8 +198,10 @@ def ensure_paths_exist(regions: List[Tuple[str, Dict[str, Any]]]) -> None:
 
 def sample_output_listing(fig_folder: str, prefix: str) -> None:
     """List a few generated figure paths to show success."""
-    pattern = os.path.join(fig_folder, f"{prefix}__*__Timeseries.png")
-    files = sorted(glob.glob(pattern))
+    files = sorted(
+        glob.glob(os.path.join(fig_folder, "**", "*.png"), recursive=True)
+        + glob.glob(os.path.join(fig_folder, "**", "*.gif"), recursive=True)
+    )
     kv("Figures created", len(files))
     for p in files[:5]:
         bullet(f"• {p}")

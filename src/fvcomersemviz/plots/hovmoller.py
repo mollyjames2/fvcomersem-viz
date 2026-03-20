@@ -13,6 +13,7 @@ from ..utils import (
     file_prefix,
     robust_clims,
     style_get,
+    resolve_cmap,
     build_time_window_label,
     nearest_index_for_dim,
 )
@@ -109,6 +110,7 @@ def station_hovmoller(
     figsize: tuple = (9, 5),
     verbose: bool = True,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Plot Hovmöller diagrams (time vs. vertical coordinate) for one or more variables
@@ -182,6 +184,12 @@ def station_hovmoller(
           - ``"norm"``: matplotlib.colors.Normalize (takes precedence over vmin/vmax)
           - ``"vmin"``: float
           - ``"vmax"``: float
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -209,7 +217,7 @@ def station_hovmoller(
     label = build_time_window_label(months, years, start_date, end_date)
 
     # time filter first; use this dataset consistently for nearest-index & z
-    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date)
+    ds_t = filter_time(ds, months=months, years=years, start_date=start_date, end_date=end_date, average_by=average_by)
 
     for name, lat, lon in stations:
         # compute nearest indices ONCE per station
@@ -293,7 +301,7 @@ def station_hovmoller(
             t = pd.to_datetime(A["time"].values)
 
             # per-variable style (fallbacks)
-            cmap_eff = style_get(var, styles, "cmap", cmap)
+            cmap_eff = resolve_cmap(style_get(var, styles, "cmap", cmap))
             norm_eff = style_get(var, styles, "norm", None)
             vmin_eff = style_get(var, styles, "vmin", vmin)
             vmax_eff = style_get(var, styles, "vmax", vmax)

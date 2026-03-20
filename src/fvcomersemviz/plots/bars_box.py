@@ -388,6 +388,7 @@ def plot_bars(
     base_dir: str = ".",
     figures_root: str = ".",
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """Create bar-chart summaries with uncertainty.
 
@@ -416,6 +417,12 @@ def plot_bars(
           {"variable","region","station","depth","day","month","year","season"}.
     error : "sd" | "ci95"
         Error bar definition.
+    average_by : str, optional
+        Temporal averaging period applied before aggregation. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
     """
 
     if not _is_supported_dim(facet_by):
@@ -510,7 +517,7 @@ def plot_bars(
     os.makedirs(outdir, exist_ok=True)
 
     # time-filter dataset first (keeps everything consistent)
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     # precompute region masks once
     region_names: List[str] = []
@@ -1024,17 +1031,27 @@ def plot_box(
     base_dir: str = ".",
     figures_root: str = ".",
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """Create box-and-whisker summaries across time samples.
 
     This uses reservoir sampling per (facet, x, hue) bin so you can plot boxplots
     without storing every time sample for massive datasets.
 
-    Fixes included:
-    - Per-facet y-axis labeling when facet_by == "variable" via ylabels mapping
-    - No "Unknown" / white boxes:
-        * If grouping by season, any samples not mapped to a season are dropped
-        * Hue plotting uses only explicit hue levels (no "_" and no Unknown)
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before aggregation. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
+
+    Notes
+    -----
+    - Per-facet y-axis labeling when facet_by == "variable" via ylabels mapping.
+    - No "Unknown" / white boxes: if grouping by season, samples not mapped to a season
+      are dropped; hue plotting uses only explicit hue levels.
     """
 
     if not _is_supported_dim(facet_by):
@@ -1124,7 +1141,7 @@ def plot_box(
     outdir = out_dir(base_dir, figures_root)
     os.makedirs(outdir, exist_ok=True)
 
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     # precompute region masks once
     region_names: List[str] = []

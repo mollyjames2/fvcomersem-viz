@@ -229,6 +229,7 @@ def build_curve_data(
         years=fil.get("years"),
         start_date=fil.get("start"),
         end_date=fil.get("end"),
+        average_by=fil.get("average_by"),
     )
 
     # 2) spatial scope (domain / region / station)

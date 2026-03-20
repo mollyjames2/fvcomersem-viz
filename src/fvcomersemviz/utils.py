@@ -290,18 +290,39 @@ def weighted_mean_std(
     except Exception:
         w = weights
 
-    # Align to shared coords (inner join) and broadcast to data shape
+    # Align to shared coords (inner join); keep w low-dimensional (do NOT broadcast
+    # to the full data shape — that would materialise a (time × node) array for the
+    # weights, which OOM-kills on large FVCOM domains).
     w, da_aligned = xr.align(w, da, join="inner", copy=False)
-    w = w.broadcast_like(da_aligned)
 
-    # Mask weights where data is NaN
-    w = w.where(da_aligned.notnull())
+    # Mask weights using a time-collapsed null check so w stays (node,).
+    # NaN locations in FVCOM are typically fixed (land/dry nodes), so collapsing
+    # over time is correct.  skipna=True in the sums handles any residual NaNs.
+    # Compute null_mask eagerly so it isn't a live dask dependency during the
+    # mean/variance passes (which would force the scheduler to cache da chunks).
+    time_dims = [d for d in da_aligned.dims if d not in w.dims]
+    if time_dims:
+        null_mask = da_aligned.notnull().any(time_dims)
+    else:
+        null_mask = da_aligned.notnull()
+    if hasattr(null_mask, "compute"):
+        null_mask = null_mask.compute()
+    w = w.where(null_mask)
 
-    wsum = w.sum(dims)
+    w_dims = [d for d in dims if d in w.dims]
+    wsum = w.sum(w_dims)
     # Avoid divide-by-zero
     wsum = xr.where(wsum == 0, np.nan, wsum)
 
+    # Compute mean first.  If mean is still a lazy dask graph built from
+    # da_aligned, the scheduler must cache every chunk of da_aligned while
+    # constructing the variance computation.  For large 3-D arrays (time ×
+    # siglay × node) this can exceed available RAM.  Materialising mean to
+    # numpy first breaks the dependency so each da_aligned chunk can be read,
+    # used, and freed independently during the variance pass.
     mean = (da_aligned * w).sum(dims, skipna=True) / wsum
+    mean = mean.compute() if hasattr(mean, "compute") else mean
+
     var = ((da_aligned - mean) ** 2 * w).sum(dims, skipna=True) / wsum
     std = np.sqrt(var)
     return mean, std
@@ -322,6 +343,32 @@ def element_mask_from_node_mask(ds: xr.Dataset, node_mask: np.ndarray) -> Option
     inside = node_mask[tri]
     keep = inside.all(axis=1)
     return keep
+
+
+def resolve_cmap(cmap: Any) -> Any:
+    """
+    Resolve a colormap to a matplotlib-compatible object.
+
+    Handles ``'cmo.thermal'``-style strings by importing from
+    ``cmocean.cm`` and returning the actual colormap object.
+    Plain matplotlib colormap names and existing Colormap objects
+    are returned unchanged.
+
+    Parameters
+    ----------
+    cmap : str or Colormap
+        Colormap name or object.
+
+    Returns
+    -------
+    Colormap or str
+        Resolved colormap suitable for passing to matplotlib.
+    """
+    if isinstance(cmap, str) and cmap.startswith("cmo."):
+        import cmocean.cm as cmo  # noqa: PLC0415
+        attr = cmap[4:]
+        return getattr(cmo, attr)
+    return cmap
 
 
 def style_get(var: str, styles: Optional[Dict[str, Dict[str, Any]]], key: str, default=None):
@@ -374,8 +421,21 @@ def select_depth(
             if thickness_var in ds and "siglay" in ds[thickness_var].dims:
                 w = ds[thickness_var]
                 w = w / w.sum("siglay")
-                return (ds * w).sum("siglay")
-            return ds.mean("siglay")
+                # Apply weights only to siglay vars to avoid broadcasting with siglev
+                siglay_vars = [v for v in ds.data_vars if "siglay" in ds[v].dims]
+                non_siglay = [v for v in ds.data_vars if "siglay" not in ds[v].dims]
+                if siglay_vars:
+                    ds_avg = (ds[siglay_vars] * w).sum("siglay")
+                    if non_siglay:
+                        ds_avg = xr.merge([ds_avg, ds[non_siglay]])
+                else:
+                    ds_avg = ds
+            else:
+                ds_avg = ds.mean("siglay")
+            # Also average interface-level (siglev) variables (e.g. km, kh)
+            if "siglev" in ds_avg.dims:
+                ds_avg = ds_avg.mean("siglev")
+            return ds_avg
         # else try to parse as number (sigma value)
         try:
             sval = float(m)

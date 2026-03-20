@@ -158,10 +158,20 @@ def domain_mean_timeseries(
     combine_by: Optional[str] = None,  # None | "var"
     show_std: bool = False,
     std_alpha: float = 0.25,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Plot domain-mean time series for one or more variables, with optional depth selection
     and time filtering. Writes one or multiple PNGs depending on `combine_by`.
+
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Notes
     -----
@@ -179,7 +189,7 @@ def domain_mean_timeseries(
     _vprint(verbose, "[domain] Start domain mean time series")
     _vprint(verbose, f"[domain] Depth={depth} -> tag='{tag}' | Time window='{label}'")
 
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     # (var, tindex, mean_1d, std_1d)
     series: List[Tuple[str, pd.DatetimeIndex, np.ndarray, np.ndarray]] = []
@@ -279,10 +289,20 @@ def station_timeseries(
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
     combine_by: Optional[str] = None,  # None | "var" | "station"
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Plot station time series by sampling the nearest grid column at each station
     (node or element), with optional depth selection and time filtering.
+
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Notes
     -----
@@ -303,7 +323,7 @@ def station_timeseries(
         _vprint(verbose, "[station] No stations provided; nothing to do.")
         return
 
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     # map station -> nearest indices
     idx_map: Dict[str, Tuple[Optional[int], Optional[int]]] = {}
@@ -467,9 +487,19 @@ def region_timeseries(
     combine_by: Optional[str] = None,  # None | "var" | "region"
     show_std: bool = False,
     std_alpha: float = 0.25,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Region-mean time series using polygon masks (shapefile or CSV boundary).
+
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Notes
     -----
@@ -490,7 +520,7 @@ def region_timeseries(
     _vprint(verbose, f"[region] Start region time series for {len(regions)} region(s)")
     _vprint(verbose, f"[region] Depth={depth} -> tag='{tag}' | Time window='{label}'")
 
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     def region_series(
         region_name: str, spec: Dict[str, Any], var: str
@@ -801,16 +831,26 @@ def domain_three_panel(
     dpi: int = 150,
     figsize: tuple = (11, 9),
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Render 3-panel summaries for each variable at the domain scale.
+
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Notes
     -----
     - Surface/bottom time series are computed after select_depth(ds_t, "surface"/"bottom").
     - Spatial mean/std per time step use area weights (art1) if available and alignable.
     """
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
     label = build_time_window_label(months, years, start_date, end_date)
     outdir = out_dir(base_dir, figures_root)
     prefix = file_prefix(base_dir)
@@ -900,9 +940,19 @@ def station_three_panel(
     dpi: int = 150,
     figsize: tuple = (11, 9),
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Render 3-panel summaries for each (station x variable).
+
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Notes
     -----
@@ -912,7 +962,7 @@ def station_three_panel(
     if not stations:
         return
 
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
     label = build_time_window_label(months, years, start_date, end_date)
     prefix = file_prefix(base_dir)
     outdir = out_dir(base_dir, figures_root)
@@ -1012,15 +1062,25 @@ def region_three_panel(
     dpi: int = 150,
     figsize: tuple = (11, 9),
     verbose: bool = False,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Render 3-panel summaries for each (region x variable).
+
+    Parameters
+    ----------
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
     """
 
     def space_dims(da: xr.DataArray) -> list[str]:
         return [d for d in da.dims if d not in ("time", "siglay")]
 
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
     label = build_time_window_label(months, years, start_date, end_date)
     outdir = out_dir(base_dir, figures_root)
     prefix = file_prefix(base_dir)

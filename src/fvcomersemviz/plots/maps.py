@@ -21,6 +21,7 @@ from ..utils import (
     robust_clims,
     build_triangulation,
     style_get,
+    resolve_cmap,
     select_depth,
     select_da_by_z,
     build_time_window_label,
@@ -152,6 +153,7 @@ def domain_map(
     grid_on: bool = False,
     verbose: bool = False,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Render domain-wide maps for one or more variables at a chosen depth and time window,
@@ -231,6 +233,12 @@ def domain_map(
           - "vmin": float
           - "vmax": float
           - "shading": {"flat", "gouraud"}
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -248,7 +256,7 @@ def domain_map(
     """
 
     # Time filter first; per-var depth is handled by resolve_da_with_depth
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     label_window = build_time_window_label(months, years, start_date, end_date)
     tag = depth_tag(depth)
@@ -267,7 +275,7 @@ def domain_map(
             continue
 
         # Per-var style overrides (with fallback to function args)
-        cmap_eff = style_get(var, styles, "cmap", cmap)
+        cmap_eff = resolve_cmap(style_get(var, styles, "cmap", cmap))
         norm_eff = style_get(var, styles, "norm", None)
         vmin_style = style_get(var, styles, "vmin", None)
         vmax_style = style_get(var, styles, "vmax", None)
@@ -368,6 +376,7 @@ def region_map(
     grid_on: bool = False,
     verbose: bool = False,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
+    average_by: Optional[str] = None,
 ) -> None:
     """
     Region-masked maps for one or more variables at a chosen depth and time window.
@@ -450,6 +459,12 @@ def region_map(
           - "vmin": float
           - "vmax": float
           - "shading": {"flat", "gouraud"}
+    average_by : str, optional
+        Temporal averaging period applied before plotting. Resamples the
+        time-filtered dataset to period means via ``xr.Dataset.resample().mean()``.
+        Accepted values: ``"hour"``, ``"day"``, ``"week"``, ``"month"``,
+        ``"year"`` (and common variants such as ``"daily"``, ``"monthly"``).
+        Default ``None`` (no averaging).
 
     Returns
     -------
@@ -470,7 +485,7 @@ def region_map(
         raise ValueError("Dataset must contain 'lon' and 'lat' for region masking.")
 
     # Time filter first; depth is handled per-var on masked subsets
-    ds_t = filter_time(ds, months, years, start_date, end_date)
+    ds_t = filter_time(ds, months, years, start_date, end_date, average_by=average_by)
 
     label_window = build_time_window_label(months, years, start_date, end_date)
     tag = depth_tag(depth)
@@ -564,7 +579,7 @@ def region_map(
                 da = ds_depth[da.name]
 
             # Per-var style overrides
-            cmap_eff = style_get(var, styles, "cmap", cmap)
+            cmap_eff = resolve_cmap(style_get(var, styles, "cmap", cmap))
             norm_eff = style_get(var, styles, "norm", None)
             vmin_style = style_get(var, styles, "vmin", None)
             vmax_style = style_get(var, styles, "vmax", None)
