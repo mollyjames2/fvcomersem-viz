@@ -86,6 +86,8 @@ def _plot_tripcolor_full(
     fname: str,
     dpi: int,
     figsize: Tuple[float, float],
+    ylim=Optional[Tuple[float, float]],
+    xlim=Optional[Tuple[float, float]],
     shading: str = "gouraud",
     norm=None,
     draw_mesh: bool = False,
@@ -114,6 +116,10 @@ def _plot_tripcolor_full(
     ax.set_title(title)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    if xlim is not None:
+        ax.set_xlim(xlim)
     cbar = fig.colorbar(tpc, ax=ax, shrink=0.9, pad=0.02)
     cbar.set_label(cbar_label)
 
@@ -146,9 +152,12 @@ def domain_map(
     groups: Optional[Dict[str, Any]] = None,
     cmap: str = "viridis",
     clim: Optional[Tuple[float, float]] = None,
+    titles: Optional [List[dict]]=None,
     robust_q: Tuple[float, float] = (5, 95),
     dpi: int = 150,
     figsize: Tuple[float, float] = (8, 6),
+    ylim: Optional[Tuple[float,float]] = None,
+    xlim: Optional[Tuple[float,float]] = None,
     shading: str = "gouraud",
     grid_on: bool = False,
     verbose: bool = False,
@@ -311,6 +320,8 @@ def domain_map(
                     fname=fname,
                     dpi=dpi,
                     figsize=figsize,
+                    ylim=ylim,
+                    xlim=xlim,
                     shading=shading_eff,
                     verbose=verbose,
                     draw_mesh=grid_on,
@@ -327,6 +338,8 @@ def domain_map(
                     fname=fname,
                     dpi=dpi,
                     figsize=figsize,
+                    ylim=ylim,
+                    xlim=xlim,
                     shading=shading_eff,
                     verbose=verbose,
                     draw_mesh=grid_on,
@@ -335,7 +348,13 @@ def domain_map(
         if desired:
             for chosen, inst in _choose_instants(da, desired, method=time_method):
                 lbl = _iso_label(chosen) if pd.notnull(chosen) else "NoTime"
-                title = f"Domain - {var} ({tag}, {lbl})"
+                if titles is not None:
+                    try:
+                        title = f"{titles[var]}"
+                    except:
+                        title = f"Domain - {var} ({tag}, {lbl})"
+                else:
+                    title = f"Domain - {var} ({tag}, {lbl})"
                 fname = os.path.join(
                     outdir, f"{prefix}__Map-Domain__{var}__{tag}__{lbl}__Instant.png"
                 )
@@ -344,7 +363,14 @@ def domain_map(
         else:
             m = da.mean("time", skipna=True) if "time" in da.dims else da
             vals = np.asarray(m.values).ravel()
-            title = f"Domain - {var} ({tag}, {label_window})"
+          #  title = f"Domain - {var} ({tag}, {label_window})"
+            if titles is not None:
+                try:
+                    title = f"{titles[var]}"
+                except:
+                    title = f"Domain - {var} ({tag}, {lbl})"
+            else:
+                title = f"Domain - {var} ({tag}, {lbl})"
             fname = os.path.join(
                 outdir, f"{prefix}__Map-Domain__{var}__{tag}__{label_window}__Mean.png"
             )
@@ -366,12 +392,15 @@ def region_map(
     time_method: str = "nearest",
     base_dir: str,
     figures_root: str,
+    titles: Optional[Dict[str]] = None,
     groups: Optional[Dict[str, Any]] = None,
     cmap: str = "viridis",
     clim: Optional[Tuple[float, float]] = None,
     robust_q: Tuple[float, float] = (5, 95),
     dpi: int = 150,
     figsize: Tuple[float, float] = (8, 6),
+    ylim: Optional [Tuple[float, float]] = None,
+    xlim: Optional [Tuple[float, float ]] = None,
     shading: str = "gouraud",
     grid_on: bool = False,
     verbose: bool = False,
@@ -623,7 +652,14 @@ def region_map(
             if desired:
                 for chosen, inst in _choose_instants(da, desired, method=time_method):
                     lbl = _iso_label(chosen) if pd.notnull(chosen) else "NoTime"
-                    title = f"Region {region_name} - {var} ({tag}, {lbl})"
+                   # title = f"Region {region_name} - {var} ({tag}, {lbl})"
+                    if titles is not None:
+                        try:
+                            title = f"{titles[var]}"
+                        except:
+                            title = f"Region {region_name} - {var} ({tag}, {lbl})"
+                    else:
+                        title = f"Region {region_name} - {var} ({tag}, {lbl})"
                     fname = os.path.join(
                         outdir,
                         f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{lbl}__Instant.png",
@@ -642,6 +678,8 @@ def region_map(
                             fname=fname,
                             dpi=dpi,
                             figsize=figsize,
+                            ylim=ylim,
+                            xlim=xlim,
                             shading=shading_eff,
                             verbose=verbose,
                             draw_mesh=grid_on,
@@ -658,6 +696,8 @@ def region_map(
                             fname=fname,
                             dpi=dpi,
                             figsize=figsize,
+                            ylim=ylim,
+                            xlim=xlim,
                             shading=shading_eff,
                             verbose=verbose,
                             draw_mesh=grid_on,
@@ -666,7 +706,11 @@ def region_map(
                 m = da.mean("time", skipna=True) if "time" in da.dims else da
                 vals = np.asarray(m.values).ravel()
                 full, clim_eff = make_masked_full(vals)
-                title = f"Region {region_name} - {var} ({tag}, {label_window})"
+                #title = f"Region {region_name} - {var} ({tag}, {label_window})"
+                if titles is not None:
+                    title = f"{titles[var]}"
+                else:
+                    title = f"{var}"
                 fname = os.path.join(
                     outdir,
                     f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{label_window}__Mean.png",
@@ -683,6 +727,8 @@ def region_map(
                         fname=fname,
                         dpi=dpi,
                         figsize=figsize,
+                        ylim=ylim,
+                        xlim=xlim,
                         shading=shading_eff,
                         verbose=verbose,
                         draw_mesh=grid_on,
@@ -699,6 +745,8 @@ def region_map(
                         fname=fname,
                         dpi=dpi,
                         figsize=figsize,
+                        ylim=ylim,
+                        xlim=xlim,
                         shading=shading_eff,
                         verbose=verbose,
                         draw_mesh=grid_on,
