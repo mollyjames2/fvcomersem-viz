@@ -284,6 +284,8 @@ def station_timeseries(
     figures_root: str,
     groups: Optional[Dict[str, Any]] = None,
     linewidth: float = 1.5,
+    fontsize: int =12,
+    ylim: Optional[Dict[tuple[float,float]]] = None,
     figsize: tuple = (10, 4),
     dpi: int = 150,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -406,10 +408,16 @@ def station_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"{var} - Stations ({tag}, {label})")
-            ax.set_xlabel("Time")
-            ax.set_ylabel(var)
-            ax.legend(loc="best")
+            ax.set_title(f"{var} - Stations ({tag}, {label})",fontsize=fontsize)
+            ax.set_xlabel("Time", fontsize=fontsize)
+            ax.set_ylabel(var,fontsize=fontsize)
+            ax.tick_params(axis='both', labelsize=fontsize)
+            ax.legend(loc="best",fontsize=fontsize)
+            if ylim is not None:
+                try:
+                    ax.set_ylim(ylim[var])
+                except:
+                    pass 
             fname = (
                 f"{prefix}__Station-All__{var}__{tag}__{label}__Timeseries__CombinedByStation.png"
             )
@@ -434,10 +442,16 @@ def station_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"Station {name} - ({tag}, {label})")
-            ax.set_xlabel("Time")
-            ax.set_ylabel("Value")
-            ax.legend(loc="best")
+            ax.set_title(f"Station {name} - ({tag}, {label})", fontsize=fontsize)
+            ax.set_xlabel("Time", fontsize=fontsize)
+            ax.set_ylabel("Value", fontsize=fontsize)
+            ax.legend(loc="best", fontsize=fontsize)
+            ax.tick_params(axis='both', labelsize=fontsize)
+            if ylim is not None:
+                try:
+                   ax.set_ylim(ylim[var])
+                except:
+                   pass
             fname = (
                 f"{prefix}__Station-{name}__multi__{tag}__{label}__Timeseries__CombinedByVar.png"
             )
@@ -456,9 +470,15 @@ def station_timeseries(
             fig, ax = plt.subplots(figsize=figsize)
             color = style_get(var, styles, "line_color", None)
             ax.plot(t, y, lw=linewidth, color=color)
-            ax.set_title(f"{var} - Station {name} ({tag}, {label})")
-            ax.set_xlabel("Time")
-            ax.set_ylabel(var)
+            ax.set_title(f"{var} - Station {name} ({tag}, {label})", fontsize=fontsize)
+            ax.set_xlabel("Time", fontsize=fontsize)
+            ax.set_ylabel(var,fontsize=fontsize)
+            ax.tick_params(axis='both', labelsize=fontsize)
+            if ylim is not None:
+                try:
+                    ax.set_ylim(ylim[var])
+                except:
+                    pass
             fname = f"{prefix}__Station-{name}__{var}__{tag}__{label}__Timeseries.png"
             path = os.path.join(outdir, fname)
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
@@ -479,8 +499,11 @@ def region_timeseries(
     base_dir: str,
     figures_root: str,
     groups: Optional[Dict[str, Any]] = None,
+    title: Optional[Dict[str]] = None,
     linewidth: float = 1.5,
+    fontsize: int = 12,
     figsize: tuple = (10, 4),
+    ylim: Optional[Dict[tuple[float,float]]] = None,
     dpi: int = 150,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     verbose: bool = True,
@@ -644,10 +667,19 @@ def region_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"Region {region_name} - ({tag}, {label})")
-            ax.set_xlabel("Time")
-            ax.set_ylabel("Value")
-            ax.legend(loc="best")
+            if ylim is not None:
+                try:
+                    ax.set_ylim(ylim[var])
+                except:
+                    pass 
+            try:
+                ax.set_title(f"{title[var]}",fontsize=fontsize) 
+            except:        
+                ax.set_title(f"Region {region_name} - ({tag}, {label})",fontsize=fontsize)
+            ax.set_xlabel("Time",fontsize=fontsize)
+            ax.set_ylabel("Value", fontsize=fontsize)
+            ax.tick_params(axis='both', labelsize=fontsize)
+            ax.legend(loc="best", fontsize=fontsize)
             fname = f"{prefix}__Region-{region_name}__multi__{tag}__{label}__Timeseries__CombinedByVar.png"
             fig.savefig(os.path.join(outdir, fname), dpi=dpi, bbox_inches="tight")
             plt.close(fig)
@@ -673,10 +705,20 @@ def region_timeseries(
                 if show_std:
                     c = line.get_color()
                     ax.fill_between(t, y - st, y + st, alpha=std_alpha, color=c, zorder=1)
-            ax.set_title(f"{var} - Regions ({tag}, {label})")
-            ax.set_xlabel("Time")
-            ax.set_ylabel(var)
-            ax.legend(loc="best")
+            try:
+                ax.set_title(f"{title[var]}",fontsize=fontsize) 
+            except:        
+                ax.set_title(f"{var} - Regions ({tag}, {label})",fontsize=fontsize)
+
+            ax.set_xlabel("Time",fontsize=fontsize)
+            if ylim is not None:
+                try:
+                    ax.set_ylim(ylim[var])
+                except:
+                    pass
+            ax.set_ylabel(var,fontsize=fontsize)
+            ax.tick_params(axis='both', labelsize=fontsize)
+            ax.legend(loc="best",fontsize=fontsize)
             fname = f"{prefix}__Region-All__{var}__{tag}__{label}__Timeseries__CombinedByRegion.png"
             fig.savefig(os.path.join(outdir, fname), dpi=dpi, bbox_inches="tight")
             plt.close(fig)
@@ -696,9 +738,18 @@ def region_timeseries(
             if show_std:
                 c = line.get_color()
                 ax.fill_between(t, y - st, y + st, alpha=std_alpha, color=c, zorder=1)
-            ax.set_title(f"{var} - Region {region_name} ({tag}, {label})")
-            ax.set_xlabel("Time")
-            ax.set_ylabel(var)
+            if ylim is not None:
+                try:
+                    ax.set_ylim(ylim[var])
+                except:
+                    pass
+            try:
+                ax.set_title(f"{title[var]}",fontsize=fontsize) 
+            except:        
+                ax.set_title(f"{var} - Region {region_name} ({tag}, {label})", fontsize=fontsize)
+            ax.set_xlabel("Time", fontsize=fontsize)
+            ax.set_ylabel(var,fontsize=fontsize)
+            ax.tick_params(axis='both', labelsize=fontsize)
             fname = f"{prefix}__Region-{region_name}__{var}__{tag}__{label}__Timeseries.png"
             path = os.path.join(outdir, fname)
             fig.savefig(path, dpi=dpi, bbox_inches="tight")
