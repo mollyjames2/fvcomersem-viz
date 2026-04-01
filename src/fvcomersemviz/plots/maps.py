@@ -368,9 +368,9 @@ def domain_map(
                 try:
                     title = f"{titles[var]}"
                 except:
-                    title = f"Domain - {var} ({tag}, {lbl})"
+                    title = f"Domain - {var} ({tag}, {label_window})"
             else:
-                title = f"Domain - {var} ({tag}, {lbl})"
+                title = f"Domain - {var} ({tag}, {label_window})"
             fname = os.path.join(
                 outdir, f"{prefix}__Map-Domain__{var}__{tag}__{label_window}__Mean.png"
             )
@@ -657,7 +657,7 @@ def region_map(
                         try:
                             title = f"{titles[var]}"
                         except:
-                            title = f"Region {region_name} - {var} ({tag}, {lbl})"
+                            title = f"Region {region_name} - {var} ({tag},{lbl})"
                     else:
                         title = f"Region {region_name} - {var} ({tag}, {lbl})"
                     fname = os.path.join(
@@ -710,7 +710,7 @@ def region_map(
                 if titles is not None:
                     title = f"{titles[var]}"
                 else:
-                    title = f"{var}"
+                    title = f"Region {region_name} - {var} ({tag}, {label_window})"
                 fname = os.path.join(
                     outdir,
                     f"{prefix}__Map-Region-{region_name}__{var}__{tag}__{label_window}__Mean.png",
