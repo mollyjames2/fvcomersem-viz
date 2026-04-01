@@ -513,7 +513,7 @@ def composition_fraction_timeseries(
     # scope
     scope: str = "domain",  # 'domain' | 'region' | 'station'
     regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,  # [(name, spec), ...]
-    stations: Optional[Sequence[Tuple[str, float, float]]] = None,  # [(name, lon, lat), ...]
+    stations: Optional[Sequence[Tuple[str, float, float]]] = None,  # [(name, lat, lon), ...]
     # time/depth filters
     depth: Any = "surface",
     months: Optional[Sequence[int]] = None,
@@ -581,7 +581,7 @@ def composition_fraction_timeseries(
         compatible with your region utilities (e.g., shapefile or CSV boundary). Masks are built
         once from the **windowed dataset** and then applied center-aware per DataArray.
     stations : Sequence[Tuple[str, float, float]], optional
-        Stations as `(name, lon, lat)` tuples, required for `scope='station'`. The nearest column
+        Stations as `(name, lat, lon)` tuples, required for `scope='station'`. The nearest column
         is selected for each variable.
 
     depth : Any, default 'surface'
@@ -963,9 +963,9 @@ def composition_fraction_timeseries(
     elif scope_norm == "station":
         if not stations:
             raise ValueError(
-                "scope='station' requires a non-empty `stations=[(name, lon, lat), ...]`"
+                "scope='station' requires a non-empty `stations=[(name, lat, lon), ...]`"
             )
-        for name, lon, lat in stations:
+        for name, lat, lon in stations:
             scoped = apply_scope(ds_t, region=None, station=(name, lat, lon), verbose=verbose)
             panels_phyto.append((name, scoped, None, None))
             panels_zoo.append((name, scoped, None, None))
@@ -974,10 +974,10 @@ def composition_fraction_timeseries(
     else:  # station_mean
         if not stations:
             raise ValueError(
-                "scope='station_mean' requires a non-empty `stations=[(name, lon, lat), ...]`"
+                "scope='station_mean' requires a non-empty `stations=[(name, lat, lon), ...]`"
             )
         station_datasets = []
-        for name, lon, lat in stations:
+        for name, lat, lon in stations:
             scoped = apply_scope(ds_t, region=None, station=(name, lat, lon), verbose=verbose)
             station_datasets.append(scoped)
         # Concatenate all station columns along a new dim so that

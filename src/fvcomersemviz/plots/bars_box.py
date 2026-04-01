@@ -36,7 +36,7 @@ Notes
 Stations
 --------
 Stations are specified as:
-    stations=[("StationA", lon, lat), ("StationB", lon, lat), ...]
+    stations=[("StationA", lat, lon), ("StationB", lat, lon), ...]
 
 We select the nearest node (if variable has 'node' dim) or nearest element center
 (if variable has 'nele' dim and ds has 'lonc'/'latc').
@@ -399,8 +399,8 @@ def plot_bars(
     *,
     # spatial grouping
     regions: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
-    stations: Optional[List[Tuple[str, float, float]]] = None,  # (name, lon, lat)
-    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]] = None,  # {label: [(name, lon, lat), ...]}
+    stations: Optional[List[Tuple[str, float, float]]] = None,  # (name, lat, lon)
+    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]] = None,  # {label: [(name, lat, lon), ...]}
     depth: Any = "surface",
     # time filtering (applied before aggregation)
     months: Optional[List[int]] = None,
@@ -448,7 +448,7 @@ def plot_bars(
         Variables or group names (resolved via resolve_da_with_depth + groups).
     regions : optional list[(name, spec)]
         Polygon specs: {"shapefile": ..., ...} or {"csv_boundary": ..., ...}.
-    stations : optional list[(name, lon, lat)]
+    stations : optional list[(name, lat, lon)]
         Point stations (nearest node/element).
     depth : Any
         Either a single depth selector OR a list/tuple of selectors to enable depth grouping.
@@ -760,7 +760,7 @@ def plot_bars(
             elif station_groups is not None:
                 tmp_grp: List[Tuple[Dict[str, str], xr.DataArray]] = []
                 for group_name, grp_stations in station_groups.items():
-                    for station_name, lon, lat in grp_stations:
+                    for station_name, lat, lon in grp_stations:
                         ctx = {
                             "variable": str(var),
                             "station": str(group_name),
@@ -772,7 +772,7 @@ def plot_bars(
 
             elif stations is not None:
                 tmp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
-                for station_name, lon, lat in stations:
+                for station_name, lat, lon in stations:
                     ctx = {
                         "variable": str(var),
                         "station": str(station_name),
@@ -1083,8 +1083,8 @@ def plot_box(
     *,
     # spatial grouping
     regions: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
-    stations: Optional[List[Tuple[str, float, float]]] = None,  # (name, lon, lat)
-    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]] = None,  # {label: [(name, lon, lat), ...]}
+    stations: Optional[List[Tuple[str, float, float]]] = None,  # (name, lat, lon)
+    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]] = None,  # {label: [(name, lat, lon), ...]}
     depth: Any = "surface",
     # time filtering (applied before aggregation)
     months: Optional[List[int]] = None,
@@ -1373,7 +1373,7 @@ def plot_box(
             elif station_groups is not None:
                 tmp_grp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
                 for group_name, grp_stations in station_groups.items():
-                    for station_name, lon, lat in grp_stations:
+                    for station_name, lat, lon in grp_stations:
                         ctx = {
                             "variable": str(var),
                             "station": str(group_name),
@@ -1385,7 +1385,7 @@ def plot_box(
 
             elif stations is not None:
                 tmp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
-                for station_name, lon, lat in stations:
+                for station_name, lat, lon in stations:
                     ctx = {
                         "variable": str(var),
                         "station": str(station_name),

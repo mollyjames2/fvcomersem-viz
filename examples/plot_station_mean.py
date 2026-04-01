@@ -29,11 +29,16 @@ import matplotlib
 
 matplotlib.use("Agg", force=True)
 
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+
 from fvcomersemviz.io import load_from_base
 from fvcomersemviz.plot import hr, info, kv, bullet, list_files, summarize_files, print_dataset_summary
 from fvcomersemviz.utils import out_dir, file_prefix
 from fvcomersemviz.plots.bars_box import plot_bars
 from fvcomersemviz.plots.composition import composition_fraction_timeseries
+from fvcomersemviz.regions import nearest_node_index
 
 # -----------------------------------------------------------------------------
 # Project paths  (EDIT THESE)
@@ -43,19 +48,19 @@ FILE_PATTERN = "erie_00??.nc"
 FIG_DIR = "/data/proteus1/scratch/moja/projects/Lake_Erie/fviz-plots/"
 
 # -----------------------------------------------------------------------------
-# Station definitions  (name, lon, lat)
+# Station definitions  (name, lat, lon)
 # -----------------------------------------------------------------------------
 # Two groups representing different shelf zones.  Replace coordinates with
 # real locations in your model domain.
 INNER_SHELF = [
-    ("IS1", -82.50, 41.80),
-    ("IS2", -82.80, 41.70),
-    ("IS3", -82.20, 41.90),
+    ("IS1", 41.80, -82.50),
+    ("IS2", 41.70, -82.80),
+    ("IS3", 41.90, -82.20),
 ]
 OUTER_SHELF = [
-    ("OS1", -81.50, 42.30),
-    ("OS2", -81.80, 42.20),
-    ("OS3", -81.20, 42.40),
+    ("OS1", 42.30, -81.50),
+    ("OS2", 42.20, -81.80),
+    ("OS3", 42.40, -81.20),
 ]
 
 # Flat list used for scope='station' / scope='station_mean'
@@ -63,9 +68,9 @@ ALL_STATIONS = INNER_SHELF + OUTER_SHELF
 
 # For single-group examples
 CENTRAL_STATIONS = [
-    ("C1", -82.00, 42.00),
-    ("C2", -82.30, 41.95),
-    ("C3", -81.80, 42.05),
+    ("C1", 42.00, -82.00),
+    ("C2", 41.95, -82.30),
+    ("C3", 42.05, -81.80),
 ]
 
 # -----------------------------------------------------------------------------
@@ -93,6 +98,218 @@ MONTHS_JJA     = [6, 7, 8]
 YEARS_2018     = [2018]
 
 
+def plot_station_locations(
+    groups: dict[str, list[tuple[str, float, float]]],
+    base_dir: str,
+    figures_root: str,
+    *,
+    padding: float = 0.5,
+) -> str:
+    """
+    Plot station locations on a cartopy map and save to figures_root.
+
+    Parameters
+    ----------
+    groups : dict
+        Mapping of group name → list of (name, lat, lon) tuples.
+    base_dir : str
+        Used to resolve the output directory.
+    figures_root : str
+        Root figures directory.
+    padding : float
+        Degrees of lat/lon padding around the station extent.
+
+    Returns
+    -------
+    str
+        Path to the saved figure.
+    """
+    all_stations = [(n, lat, lon) for slist in groups.values() for n, lat, lon in slist]
+    lats = [s[1] for s in all_stations]
+    lons = [s[2] for s in all_stations]
+
+    extent = [
+        min(lons) - padding, max(lons) + padding,
+        min(lats) - padding, max(lats) + padding,
+    ]
+
+    colours = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    proj = ccrs.PlateCarree()
+
+    fig, ax = plt.subplots(figsize=(10, 6), subplot_kw={"projection": proj})
+    ax.set_extent(extent, crs=proj)
+    ax.add_feature(cfeature.LAND, facecolor="lightgray", zorder=0)
+    ax.add_feature(cfeature.LAKES, facecolor="aliceblue", edgecolor="steelblue", zorder=1)
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.8, zorder=2)
+    ax.add_feature(cfeature.BORDERS, linewidth=0.5, linestyle=":", zorder=2)
+    gl = ax.gridlines(draw_labels=True, linewidth=0.4, linestyle="--", color="gray", alpha=0.6)
+    gl.top_labels = False
+    gl.right_labels = False
+
+    for i, (group_name, slist) in enumerate(groups.items()):
+        c = colours[i % len(colours)]
+        for j, (name, lat, lon) in enumerate(slist):
+            ax.plot(lon, lat, "o", color=c, markersize=8, transform=proj,
+                    label=group_name if j == 0 else None, zorder=3)
+            ax.text(lon + 0.05, lat + 0.05, name, fontsize=8, transform=proj,
+                    color=c, zorder=4)
+
+    ax.legend(loc="lower right", fontsize=9)
+    ax.set_title("Station locations", fontsize=12)
+
+    odir = out_dir(base_dir, figures_root)
+    prefix = file_prefix(base_dir)
+    out_path = os.path.join(odir, f"{prefix}_station_locations.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+def sanity_check_stations(
+    ds: object,
+    groups: dict[str, list[tuple[str, float, float]]],
+    base_dir: str,
+    figures_root: str,
+    *,
+    warn_km: float = 10.0,
+) -> str:
+    """
+    Print a snap-distance table and save a map showing requested vs snapped positions.
+
+    For each station the nearest mesh node is found; the table reports the
+    requested coordinates, the actual node coordinates, and the great-circle
+    distance between them.  Rows where the snap distance exceeds ``warn_km``
+    are flagged with '!!' — a large distance usually means a coord swap or an
+    out-of-domain station.
+
+    The saved map overlays requested positions (hollow circle) and snapped node
+    positions (filled cross) connected by a thin line so mismatches are
+    immediately visible.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Loaded dataset with 'lat' and 'lon' node coordinates.
+    groups : dict
+        Mapping of group name → list of (name, lat, lon) tuples.
+    base_dir : str
+        Used to resolve the output directory.
+    figures_root : str
+        Root figures directory.
+    warn_km : float
+        Snap distance (km) above which a row is flagged in the table.
+
+    Returns
+    -------
+    str
+        Path to the saved figure.
+    """
+    import numpy as np
+
+    lat_arr = np.asarray(ds["lat"].values).ravel()
+    lon_arr = np.asarray(ds["lon"].values).ravel()
+
+    R_KM = 6371.0
+
+    rows = []
+    for group_name, slist in groups.items():
+        for name, req_lat, req_lon in slist:
+            idx = nearest_node_index(ds, req_lat, req_lon)
+            if idx is None:
+                rows.append((group_name, name, req_lat, req_lon, None, None, None))
+                continue
+            snap_lat = float(lat_arr[idx])
+            snap_lon = float(lon_arr[idx])
+            # haversine distance
+            dlat = np.deg2rad(snap_lat - req_lat)
+            dlon = np.deg2rad(snap_lon - req_lon)
+            a = np.sin(dlat / 2) ** 2 + np.cos(np.deg2rad(req_lat)) * np.cos(np.deg2rad(snap_lat)) * np.sin(dlon / 2) ** 2
+            dist_km = 2 * R_KM * np.arcsin(np.sqrt(a))
+            rows.append((group_name, name, req_lat, req_lon, snap_lat, snap_lon, dist_km))
+
+    # --- print table ---
+    header = f"{'':2}  {'Group':<14}  {'Station':<8}  {'Req lat':>8}  {'Req lon':>9}  {'Node lat':>9}  {'Node lon':>10}  {'Dist km':>8}"
+    print(hr("-"))
+    print("Station snap-distance check")
+    print(header)
+    print("-" * len(header))
+    any_warn = False
+    for group_name, name, req_lat, req_lon, snap_lat, snap_lon, dist_km in rows:
+        if dist_km is None:
+            flag = "??"
+            row = f"{flag}  {group_name:<14}  {name:<8}  {req_lat:>8.4f}  {req_lon:>9.4f}  {'N/A':>9}  {'N/A':>10}  {'N/A':>8}"
+            any_warn = True
+        else:
+            flag = "!!" if dist_km > warn_km else "  "
+            if dist_km > warn_km:
+                any_warn = True
+            row = f"{flag}  {group_name:<14}  {name:<8}  {req_lat:>8.4f}  {req_lon:>9.4f}  {snap_lat:>9.4f}  {snap_lon:>10.4f}  {dist_km:>8.3f}"
+        print(row)
+    print("-" * len(header))
+    if any_warn:
+        print("!! one or more stations have large snap distances — check coordinates or domain extent")
+    print(hr("-"))
+
+    # --- map: requested (hollow circle) vs snapped (filled x), connected by line ---
+    all_req_lats = [r[2] for r in rows if r[6] is not None]
+    all_req_lons = [r[3] for r in rows if r[6] is not None]
+    padding = 0.5
+    extent = [
+        min(all_req_lons) - padding, max(all_req_lons) + padding,
+        min(all_req_lats) - padding, max(all_req_lats) + padding,
+    ]
+
+    colours = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    proj = ccrs.PlateCarree()
+    fig, ax = plt.subplots(figsize=(10, 6), subplot_kw={"projection": proj})
+    ax.set_extent(extent, crs=proj)
+    ax.add_feature(cfeature.LAND, facecolor="lightgray", zorder=0)
+    ax.add_feature(cfeature.LAKES, facecolor="aliceblue", edgecolor="steelblue", zorder=1)
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.8, zorder=2)
+    gl = ax.gridlines(draw_labels=True, linewidth=0.4, linestyle="--", color="gray", alpha=0.6)
+    gl.top_labels = False
+    gl.right_labels = False
+
+    group_names = list(groups.keys())
+    for row in rows:
+        group_name, name, req_lat, req_lon, snap_lat, snap_lon, dist_km = row
+        c = colours[group_names.index(group_name) % len(colours)]
+        if snap_lat is None:
+            continue
+        # line connecting requested → snapped
+        ax.plot([req_lon, snap_lon], [req_lat, snap_lat], "-", color=c, linewidth=0.8,
+                alpha=0.6, transform=proj, zorder=3)
+        # requested position: hollow circle
+        ax.plot(req_lon, req_lat, "o", color=c, markersize=9, markerfacecolor="none",
+                markeredgewidth=1.5, transform=proj, zorder=4)
+        # snapped node: filled x
+        ax.plot(snap_lon, snap_lat, "x", color=c, markersize=7, markeredgewidth=2,
+                transform=proj, zorder=4)
+        ax.text(req_lon + 0.04, req_lat + 0.04, name, fontsize=7, color=c,
+                transform=proj, zorder=5)
+
+    # legend proxies
+    from matplotlib.lines import Line2D
+    proxies = [
+        Line2D([0], [0], marker="o", color="gray", markerfacecolor="none",
+               markeredgewidth=1.5, markersize=8, linestyle="none", label="Requested"),
+        Line2D([0], [0], marker="x", color="gray", markeredgewidth=2,
+               markersize=7, linestyle="none", label="Snapped node"),
+    ]
+    for i, gname in enumerate(group_names):
+        c = colours[i % len(colours)]
+        proxies.append(Line2D([0], [0], color=c, linewidth=2, label=gname))
+    ax.legend(handles=proxies, loc="lower right", fontsize=8)
+    ax.set_title("Station snap check  (○ requested  ✕ nearest node)", fontsize=11)
+
+    odir = out_dir(base_dir, figures_root)
+    prefix = file_prefix(base_dir)
+    out_path = os.path.join(odir, f"{prefix}_station_snap_check.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def main() -> int:
     if not os.environ.get("PYTHONWARNINGS"):
         warnings.filterwarnings("default")
@@ -114,6 +331,33 @@ def main() -> int:
 
     kv("Figure folder", out_dir(BASE_DIR, FIG_DIR))
     kv("Filename prefix", file_prefix(BASE_DIR))
+
+    # =========================================================================
+    # Station snap-distance check
+    # =========================================================================
+    info("Checking station snapping")
+    station_groups_all = {
+        "Inner shelf": INNER_SHELF,
+        "Outer shelf": OUTER_SHELF,
+        "Central": CENTRAL_STATIONS,
+    }
+    snap_path = sanity_check_stations(ds, station_groups_all, base_dir=BASE_DIR, figures_root=FIG_DIR)
+    kv("Saved (snap check map)", snap_path)
+
+    # =========================================================================
+    # Station location map — quick sanity check
+    # =========================================================================
+    info("Plotting station locations")
+    loc_path = plot_station_locations(
+        {
+            "Inner shelf": INNER_SHELF,
+            "Outer shelf": OUTER_SHELF,
+            "Central": CENTRAL_STATIONS,
+        },
+        base_dir=BASE_DIR,
+        figures_root=FIG_DIR,
+    )
+    kv("Saved (station locations)", loc_path)
 
     # =========================================================================
     # Example 1: Single station group, depth_avg, error over depth + time
