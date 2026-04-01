@@ -286,6 +286,7 @@ def station_timeseries(
     linewidth: float = 1.5,
     fontsize: int =12,
     ylim: Optional[Dict[tuple[float,float]]] = None,
+    title: Optional[Dict[str]] = None,
     figsize: tuple = (10, 4),
     dpi: int = 150,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
@@ -408,7 +409,11 @@ def station_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"{var} - Stations ({tag}, {label})",fontsize=fontsize)
+            try:
+                ax.set_title(f"{title[var]}",fontsize=fontsize) 
+            except:        
+                ax.set_title(f"{var} - Stations ({tag}, {label})",fontsize=fontsize)
+          #  ax.set_title(f"{var} - Stations ({tag}, {label})",fontsize=fontsize)
             ax.set_xlabel("Time", fontsize=fontsize)
             ax.set_ylabel(var,fontsize=fontsize)
             ax.tick_params(axis='both', labelsize=fontsize)
@@ -442,7 +447,11 @@ def station_timeseries(
             if not plotted:
                 plt.close(fig)
                 continue
-            ax.set_title(f"Station {name} - ({tag}, {label})", fontsize=fontsize)
+            try:
+                ax.set_title(f"{title[var]}",fontsize=fontsize) 
+            except:        
+                ax.set_title(f"Station {name} - ({tag}, {label})", fontsize=fontsize)
+         #   ax.set_title(f"Station {name} - ({tag}, {label})", fontsize=fontsize)
             ax.set_xlabel("Time", fontsize=fontsize)
             ax.set_ylabel("Value", fontsize=fontsize)
             ax.legend(loc="best", fontsize=fontsize)
@@ -470,7 +479,11 @@ def station_timeseries(
             fig, ax = plt.subplots(figsize=figsize)
             color = style_get(var, styles, "line_color", None)
             ax.plot(t, y, lw=linewidth, color=color)
-            ax.set_title(f"{var} - Station {name} ({tag}, {label})", fontsize=fontsize)
+            try:
+                ax.set_title(f"{title[var]}",fontsize=fontsize) 
+            except:        
+                ax.set_title(f"{var} - Station {name} ({tag}, {label})", fontsize=fontsize)
+           # ax.set_title(f"{var} - Station {name} ({tag}, {label})", fontsize=fontsize)
             ax.set_xlabel("Time", fontsize=fontsize)
             ax.set_ylabel(var,fontsize=fontsize)
             ax.tick_params(axis='both', labelsize=fontsize)
