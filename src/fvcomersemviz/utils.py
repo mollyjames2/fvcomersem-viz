@@ -48,22 +48,25 @@ def resolve_da_with_depth(
     depth: Any = "surface",
     groups: Optional[dict] = None,
     verbose: bool = False,
+    keep_siglay: bool = False,
 ) -> xr.DataArray:
     ds_scoped = ds
-    try:
-        ds_scoped = select_depth(ds, depth, verbose=verbose)
-    except Exception:
-        pass
+    if not keep_siglay:
+        try:
+            ds_scoped = select_depth(ds, depth, verbose=verbose)
+        except Exception:
+            pass
 
     da = eval_group_or_var(ds_scoped, var, groups)
 
     if "siglay" in da.dims:
-        if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
-            da = select_da_by_z(da, ds_scoped, float(depth), verbose=verbose)
-        elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
-            da = select_da_by_z(da, ds_scoped, float(depth[1]), verbose=verbose)
-        elif isinstance(depth, dict) and "z_m" in depth:
-            da = select_da_by_z(da, ds_scoped, float(depth["z_m"]), verbose=verbose)
+        if not keep_siglay:
+            if isinstance(depth, (float, np.floating)) and not (-1.0 <= float(depth) <= 0.0):
+                da = select_da_by_z(da, ds_scoped, float(depth), verbose=verbose)
+            elif isinstance(depth, tuple) and len(depth) > 0 and depth[0] == "z_m":
+                da = select_da_by_z(da, ds_scoped, float(depth[1]), verbose=verbose)
+            elif isinstance(depth, dict) and "z_m" in depth:
+                da = select_da_by_z(da, ds_scoped, float(depth["z_m"]), verbose=verbose)
         return da
 
     if verbose:
