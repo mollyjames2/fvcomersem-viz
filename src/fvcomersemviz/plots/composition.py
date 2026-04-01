@@ -513,7 +513,7 @@ def composition_fraction_timeseries(
     # scope
     scope: str = "domain",  # 'domain' | 'region' | 'station'
     regions: Optional[Sequence[Tuple[str, Dict[str, Any]]]] = None,  # [(name, spec), ...]
-    stations: Optional[Sequence[Tuple[str, float, float]]] = None,  # [(name, lat, lon), ...]
+    stations: Optional[Sequence[Tuple[str, float, float]]] = None,  # [(name, lon, lat), ...]
     # time/depth filters
     depth: Any = "surface",
     months: Optional[Sequence[int]] = None,
@@ -581,7 +581,7 @@ def composition_fraction_timeseries(
         compatible with your region utilities (e.g., shapefile or CSV boundary). Masks are built
         once from the **windowed dataset** and then applied center-aware per DataArray.
     stations : Sequence[Tuple[str, float, float]], optional
-        Stations as `(name, lat, lon)` tuples, required for `scope='station'`. The nearest column
+        Stations as `(name, lon, lat)` tuples, required for `scope='station'`. The nearest column
         is selected for each variable.
 
     depth : Any, default 'surface'
@@ -908,7 +908,14 @@ def composition_fraction_timeseries(
         return path
 
     # -------- select depth + time window once --------
-    ds_depth = select_depth(ds, depth, verbose=verbose)
+    # For depth_avg we intentionally defer siglay averaging: keep it as a
+    # space dimension so that _fraction_timeseries_for_group computes the
+    # mean *and* ±1σ band across depth layers rather than collapsing to a
+    # single value with zero spread.
+    if depth == "depth_avg":
+        ds_depth = ds
+    else:
+        ds_depth = select_depth(ds, depth, verbose=verbose)
     ds_t = filter_time(
         ds_depth, months=months, years=years, start_date=start_date, end_date=end_date,
         average_by=average_by,
@@ -916,8 +923,8 @@ def composition_fraction_timeseries(
 
     # -------- panels by scope --------
     scope_norm = scope.strip().lower()
-    if scope_norm not in ("domain", "region", "station"):
-        raise ValueError("scope must be 'domain', 'region', or 'station'")
+    if scope_norm not in ("domain", "region", "station", "station_mean"):
+        raise ValueError("scope must be 'domain', 'region', 'station', or 'station_mean'")
 
     panels_phyto: List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
     panels_zoo: List[Tuple[str, xr.Dataset, Optional[np.ndarray], Optional[np.ndarray]]] = []
@@ -953,16 +960,36 @@ def composition_fraction_timeseries(
 
         fig_tag = f"Regions-{len(panels_phyto)}"
 
-    else:  # station
+    elif scope_norm == "station":
         if not stations:
             raise ValueError(
-                "scope='station' requires a non-empty `stations=[(name, lat, lon), ...]`"
+                "scope='station' requires a non-empty `stations=[(name, lon, lat), ...]`"
             )
-        for name, lat, lon in stations:
+        for name, lon, lat in stations:
             scoped = apply_scope(ds_t, region=None, station=(name, lat, lon), verbose=verbose)
             panels_phyto.append((name, scoped, None, None))
             panels_zoo.append((name, scoped, None, None))
         fig_tag = f"Stations-{len(stations)}"
+
+    else:  # station_mean
+        if not stations:
+            raise ValueError(
+                "scope='station_mean' requires a non-empty `stations=[(name, lon, lat), ...]`"
+            )
+        station_datasets = []
+        for name, lon, lat in stations:
+            scoped = apply_scope(ds_t, region=None, station=(name, lat, lon), verbose=verbose)
+            station_datasets.append(scoped)
+        # Concatenate all station columns along a new dim so that
+        # _fraction_timeseries_for_group reduces over stations and computes
+        # mean + ±1σ band reflecting spread across the station ensemble.
+        ds_stacked = xr.concat(
+            station_datasets, dim="station_idx", coords="minimal", compat="override"
+        )
+        label = f"Mean of {len(stations)} stations"
+        panels_phyto.append((label, ds_stacked, None, None))
+        panels_zoo.append((label, ds_stacked, None, None))
+        fig_tag = f"StationMean-{len(stations)}"
 
     # ensure we only try to draw variables that exist somewhere (keep full lists; per-panel filters happen inside)
     phyto_vars = list(phyto_vars)

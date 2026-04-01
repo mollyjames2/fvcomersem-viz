@@ -207,6 +207,40 @@ def _space_mean_over_dims(
     return da.mean(space_dims, skipna=True)
 
 
+def _space_mean_keep_siglay(
+    da: xr.DataArray, ds: xr.Dataset, *, verbose: bool = False
+) -> xr.DataArray:
+    """Area-weighted mean over horizontal space dims only; preserves 'siglay'.
+
+    Used when depth='depth_avg' so that siglay variance is captured by the
+    running stats rather than being collapsed before accumulation.
+    """
+    space_dims = [d for d in da.dims if d not in ("time", "siglay")]
+    if not space_dims:
+        return da
+
+    if "art1" in ds and all(d in ds["art1"].dims for d in space_dims):
+        w = ds["art1"]
+        for d in space_dims:
+            if d in w.dims and d in da.dims and w.sizes.get(d) != da.sizes.get(d):
+                if d in w.coords and d in da.coords and w[d].ndim == 1 and da[d].ndim == 1:
+                    try:
+                        w = w.sel({d: da[d]})
+                    except Exception:
+                        _vprint(
+                            verbose,
+                            f"[space-mean-siglay] Failed to align 'art1' on dim '{d}', using simple mean",
+                        )
+                        return da.mean(space_dims, skipna=True)
+                else:
+                    return da.mean(space_dims, skipna=True)
+        num = (da * w).sum(space_dims, skipna=True)
+        den = w.sum(space_dims, skipna=True)
+        return num / den
+
+    return da.mean(space_dims, skipna=True)
+
+
 # -----------------------
 # running stats (streaming)
 # -----------------------
@@ -312,6 +346,7 @@ def _split_identity_and_dispatch(
     depth_list: List[Any],
     regions: Optional[List[Tuple[str, Dict[str, Any]]]],
     stations: Optional[List[Tuple[str, float, float]]],
+    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]],
     call_fn,
     base_kwargs: Dict[str, Any],
 ) -> bool:
@@ -342,10 +377,14 @@ def _split_identity_and_dispatch(
         return True
 
     if split_by == "station":
-        if stations is None:
-            raise ValueError("split_by='station' requires stations=...")
-        for s in stations:
-            call_fn(ds, stations=[s], **base_kwargs)
+        if stations is None and station_groups is None:
+            raise ValueError("split_by='station' requires stations= or station_groups=...")
+        if stations is not None:
+            for s in stations:
+                call_fn(ds, stations=[s], **base_kwargs)
+        else:
+            for group_name, grp_stations in station_groups.items():
+                call_fn(ds, station_groups={group_name: grp_stations}, **base_kwargs)
         return True
 
     raise ValueError("split_by must be one of: None, 'variable', 'depth', 'region', 'station'")
@@ -361,6 +400,7 @@ def plot_bars(
     # spatial grouping
     regions: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
     stations: Optional[List[Tuple[str, float, float]]] = None,  # (name, lon, lat)
+    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]] = None,  # {label: [(name, lon, lat), ...]}
     depth: Any = "surface",
     # time filtering (applied before aggregation)
     months: Optional[List[int]] = None,
@@ -443,18 +483,18 @@ def plot_bars(
 
     if x_by == "region" and regions is None:
         raise ValueError("x_by='region' requires regions=...")
-    if x_by == "station" and stations is None:
-        raise ValueError("x_by='station' requires stations=...")
+    if x_by == "station" and stations is None and station_groups is None:
+        raise ValueError("x_by='station' requires stations= or station_groups=...")
 
     if hue_by == "region" and regions is None:
         raise ValueError("hue_by='region' requires regions=...")
-    if hue_by == "station" and stations is None:
-        raise ValueError("hue_by='station' requires stations=...")
+    if hue_by == "station" and stations is None and station_groups is None:
+        raise ValueError("hue_by='station' requires stations= or station_groups=...")
 
     if facet_by == "region" and regions is None:
         raise ValueError("facet_by='region' requires regions=...")
-    if facet_by == "station" and stations is None:
-        raise ValueError("facet_by='station' requires stations=...")
+    if facet_by == "station" and stations is None and station_groups is None:
+        raise ValueError("facet_by='station' requires stations= or station_groups=...")
 
     # seasons default (runtime overridable)
     if seasons is None:
@@ -482,10 +522,12 @@ def plot_bars(
         depth_list=depth_list,
         regions=regions,
         stations=stations,
+        station_groups=station_groups,
         call_fn=plot_bars,
         base_kwargs=dict(
             regions=regions,
             stations=stations,
+            station_groups=station_groups,
             depth=depth,
             months=months,
             years=years,
@@ -548,10 +590,12 @@ def plot_bars(
             if "nv" in ds_t:
                 region_masks_elem[region_name] = element_mask_from_node_mask(m_nodes, ds_t["nv"])
 
-    # station names
+    # station names (individual stations or group labels)
     station_names: List[str] = []
     if stations is not None:
         station_names = [s[0] for s in stations]
+    elif station_groups is not None:
+        station_names = list(station_groups.keys())
 
     # years ordering (optional)
     years_in_data: Optional[List[str]] = None
@@ -566,8 +610,14 @@ def plot_bars(
 
     # helper: resolve series for a given var/depth and optionally region/station
     def _series_for_domain(var: str, depth_sel: Any) -> xr.DataArray:
-        da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose)
-        da_1d = _space_mean_over_dims(da, ds_t, verbose=verbose).squeeze()
+        keep = depth_sel == "depth_avg"
+        da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose, keep_siglay=keep)
+        if keep:
+            da_1d = _space_mean_keep_siglay(da, ds_t, verbose=verbose)
+            sq = [d for d in da_1d.dims if d not in ("time", "siglay") and da_1d.sizes[d] == 1]
+            da_1d = da_1d.squeeze(sq) if sq else da_1d
+        else:
+            da_1d = _space_mean_over_dims(da, ds_t, verbose=verbose).squeeze()
         if "time" not in da_1d.dims:
             if "time" in da.dims:
                 da_1d = da_1d.expand_dims(time=da["time"])
@@ -576,7 +626,8 @@ def plot_bars(
         return da_1d
 
     def _series_for_region(var: str, depth_sel: Any, region_name: str) -> xr.DataArray:
-        da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose)
+        keep = depth_sel == "depth_avg"
+        da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose, keep_siglay=keep)
         if "node" in da.dims:
             da = da.where(region_masks[region_name])
         elif "nele" in da.dims:
@@ -588,7 +639,12 @@ def plot_bars(
                 verbose, f"[bars] Variable '{var}' has no node/nele dims; region masking skipped"
             )
 
-        da_1d = _space_mean_over_dims(da, ds_t, verbose=verbose).squeeze()
+        if keep:
+            da_1d = _space_mean_keep_siglay(da, ds_t, verbose=verbose)
+            sq = [d for d in da_1d.dims if d not in ("time", "siglay") and da_1d.sizes[d] == 1]
+            da_1d = da_1d.squeeze(sq) if sq else da_1d
+        else:
+            da_1d = _space_mean_over_dims(da, ds_t, verbose=verbose).squeeze()
         if "time" not in da_1d.dims:
             if "time" in da.dims:
                 da_1d = da_1d.expand_dims(time=da["time"])
@@ -599,7 +655,8 @@ def plot_bars(
     def _series_for_station(
         var: str, depth_sel: Any, station_name: str, lon: float, lat: float
     ) -> xr.DataArray:
-        da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose)
+        keep = depth_sel == "depth_avg"
+        da = resolve_da_with_depth(ds_t, var, depth=depth_sel, groups=groups, verbose=verbose, keep_siglay=keep)
 
         if "node" in da.dims:
             idx = _extract_station_index(ds_t, lon=lon, lat=lat, kind="node")
@@ -612,7 +669,11 @@ def plot_bars(
                 f"Station selection not supported for variable '{var}' (no node/nele dim)."
             )
 
-        da_s = da_s.squeeze()
+        if keep:
+            sq = [d for d in da_s.dims if d not in ("time", "siglay") and da_s.sizes[d] == 1]
+            da_s = da_s.squeeze(sq) if sq else da_s
+        else:
+            da_s = da_s.squeeze()
         if "time" not in da_s.dims:
             if "time" in da.dims:
                 da_s = da_s.expand_dims(time=da["time"])
@@ -638,7 +699,7 @@ def plot_bars(
                 return ["domain"]
             return list(region_names)
         if dim == "station":
-            if stations is None:
+            if stations is None and station_groups is None:
                 return []
             return list(station_names)
         if dim == "depth":
@@ -696,6 +757,19 @@ def plot_bars(
                     tmp.append((ctx, s))
                 series_iter = tmp
 
+            elif station_groups is not None:
+                tmp_grp: List[Tuple[Dict[str, str], xr.DataArray]] = []
+                for group_name, grp_stations in station_groups.items():
+                    for station_name, lon, lat in grp_stations:
+                        ctx = {
+                            "variable": str(var),
+                            "station": str(group_name),
+                            "depth": str(depth_level),
+                        }
+                        s = _series_for_station(var, depth_sel, station_name, lon, lat)
+                        tmp_grp.append((ctx, s))
+                series_iter = tmp_grp
+
             elif stations is not None:
                 tmp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
                 for station_name, lon, lat in stations:
@@ -716,6 +790,16 @@ def plot_bars(
             for ctx, s in series_iter:
                 t = _ensure_time_index(s)
                 vals = np.asarray(s.values, dtype=float)
+
+                # When depth_avg is used, siglay is preserved and vals may be
+                # 2D (time, siglay). Flatten to 1D by repeating each time label
+                # once per depth layer so every (time, depth) sample lands in
+                # the correct time bin and contributes to the variance estimate.
+                if vals.ndim > 1:
+                    n_time = len(t)
+                    n_depth = vals.size // n_time
+                    t = pd.DatetimeIndex(np.repeat(t, n_depth))
+                    vals = vals.reshape(n_time, n_depth).ravel()
 
                 # Build time-label arrays only for time dims that are actually used
                 time_labels: Dict[str, np.ndarray] = {}
@@ -1000,6 +1084,7 @@ def plot_box(
     # spatial grouping
     regions: Optional[List[Tuple[str, Dict[str, Any]]]] = None,
     stations: Optional[List[Tuple[str, float, float]]] = None,  # (name, lon, lat)
+    station_groups: Optional[Dict[str, List[Tuple[str, float, float]]]] = None,  # {label: [(name, lon, lat), ...]}
     depth: Any = "surface",
     # time filtering (applied before aggregation)
     months: Optional[List[int]] = None,
@@ -1069,18 +1154,18 @@ def plot_box(
 
     if x_by == "region" and regions is None:
         raise ValueError("x_by='region' requires regions=...")
-    if x_by == "station" and stations is None:
-        raise ValueError("x_by='station' requires stations=...")
+    if x_by == "station" and stations is None and station_groups is None:
+        raise ValueError("x_by='station' requires stations= or station_groups=...")
 
     if hue_by == "region" and regions is None:
         raise ValueError("hue_by='region' requires regions=...")
-    if hue_by == "station" and stations is None:
-        raise ValueError("hue_by='station' requires stations=...")
+    if hue_by == "station" and stations is None and station_groups is None:
+        raise ValueError("hue_by='station' requires stations= or station_groups=...")
 
     if facet_by == "region" and regions is None:
         raise ValueError("facet_by='region' requires regions=...")
-    if facet_by == "station" and stations is None:
-        raise ValueError("facet_by='station' requires stations=...")
+    if facet_by == "station" and stations is None and station_groups is None:
+        raise ValueError("facet_by='station' requires stations= or station_groups=...")
 
     if seasons is None:
         seasons = {
@@ -1106,10 +1191,12 @@ def plot_box(
         depth_list=depth_list,
         regions=regions,
         stations=stations,
+        station_groups=station_groups,
         call_fn=plot_box,
         base_kwargs=dict(
             regions=regions,
             stations=stations,
+            station_groups=station_groups,
             depth=depth,
             months=months,
             years=years,
@@ -1175,6 +1262,8 @@ def plot_box(
     station_names: List[str] = []
     if stations is not None:
         station_names = [s[0] for s in stations]
+    elif station_groups is not None:
+        station_names = list(station_groups.keys())
 
     years_in_data: Optional[List[str]] = None
     if "time" in ds_t:
@@ -1281,6 +1370,19 @@ def plot_box(
                     tmp.append((ctx, s))
                 series_iter = tmp
 
+            elif station_groups is not None:
+                tmp_grp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
+                for group_name, grp_stations in station_groups.items():
+                    for station_name, lon, lat in grp_stations:
+                        ctx = {
+                            "variable": str(var),
+                            "station": str(group_name),
+                            "depth": str(depth_level),
+                        }
+                        s = _series_for_station(var, depth_sel, station_name, lon, lat)
+                        tmp_grp2.append((ctx, s))
+                series_iter = tmp_grp2
+
             elif stations is not None:
                 tmp2: List[Tuple[Dict[str, str], xr.DataArray]] = []
                 for station_name, lon, lat in stations:
@@ -1301,6 +1403,16 @@ def plot_box(
             for ctx, s in series_iter:
                 t = _ensure_time_index(s)
                 vals = np.asarray(s.values, dtype=float)
+
+                # When depth_avg is used, siglay is preserved and vals may be
+                # 2D (time, siglay). Flatten to 1D by repeating each time label
+                # once per depth layer so every (time, depth) sample lands in
+                # the correct time bin and contributes to the variance estimate.
+                if vals.ndim > 1:
+                    n_time = len(t)
+                    n_depth = vals.size // n_time
+                    t = pd.DatetimeIndex(np.repeat(t, n_depth))
+                    vals = vals.reshape(n_time, n_depth).ravel()
 
                 time_labels: Dict[str, np.ndarray] = {}
                 for d in used_dims:
