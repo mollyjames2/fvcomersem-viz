@@ -104,6 +104,7 @@ def station_hovmoller(
     figures_root: str,
     groups: Optional[Dict[str, Any]] = None,
     cmap: str = "viridis",
+    title: Optional[Dict[str]] = None,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     dpi: int = 150,
@@ -332,7 +333,11 @@ def station_hovmoller(
                     vmin=None if norm_eff is not None else vvmin,
                     vmax=None if norm_eff is not None else vvmax,
                 )
-                ax.set_title(f"{var} — Hovmöller at {name} (sigma, {label})")
+                try:
+                    ax.set_title(f"{title[var]}") 
+                except:        
+                    ax.set_title(f"{var} — Hovmöller at {name} (sigma, {label})")
+             #   ax.set_title(f"{var} — Hovmöller at {name} (sigma, {label})")
                 ax.set_xlabel("Time")
                 ax.set_ylabel("sigma")
                 ax.set_ylim(np.nanmin(y), np.nanmax(y))
@@ -414,7 +419,11 @@ def station_hovmoller(
                     vmin=None if norm_eff is not None else vvmin,
                     vmax=None if norm_eff is not None else vvmax,
                 )
-                ax.set_title(f"{var} — Hovmöller at {name} (z, {label})")
+                try:
+                    ax.set_title(f"{title[var]}") 
+                except:        
+                    ax.set_title(f"{var} — Hovmöller at {name} (z, {label})")
+                #ax.set_title(f"{var} — Hovmöller at {name} (z, {label})")
                 ax.set_xlabel("Time")
                 ax.set_ylabel("Depth (m)")
                 ax.set_ylim(np.nanmin(zlev), np.nanmax(zlev))  # negative at bottom, 0 at top
