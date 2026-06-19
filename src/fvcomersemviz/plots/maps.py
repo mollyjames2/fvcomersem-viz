@@ -88,6 +88,11 @@ def _plot_tripcolor_full(
     figsize: Tuple[float, float],
     ylim=Optional[Tuple[float, float]],
     xlim=Optional[Tuple[float, float]],
+    obs: bool = False,
+    obs_file_path: str,
+    obs_size: int,
+    obs_variable_name: str,
+    obs_edge_colour: str,
     shading: str = "gouraud",
     norm=None,
     draw_mesh: bool = False,
@@ -109,7 +114,6 @@ def _plot_tripcolor_full(
     # Only set explicit clim when no norm is in use
     if clim is not None and norm is None:
         tpc.set_clim(*clim)
-
     if draw_mesh:
         ax.triplot(tri, color="k", lw=0.3, alpha=0.4, zorder=3)
 
@@ -124,6 +128,18 @@ def _plot_tripcolor_full(
     cbar.set_label(cbar_label)
 
     os.makedirs(os.path.dirname(fname), exist_ok=True)
+
+    if obs:
+        print (obs_file_path)
+        obs_data=pd.read_csv(obs_file_path)
+        obs_lat=obs_data['lat']
+        obs_lon=obs_data['lon']
+        obs_var=obs_data[obs_variable_name]
+        if clim is not None:
+            ax.scatter(obs_lon, obs_lat, c=obs_var,s=obs_size,edgecolors=obs_edge_colour, vmin=clim[0], vmax=clim[1],cmap=cmap)
+        else:
+            raise ValueError("Vmin and vmax must be proided as styles for observations to plot on map")
+
     fig.savefig(fname, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     if verbose:
@@ -161,6 +177,11 @@ def domain_map(
     shading: str = "gouraud",
     grid_on: bool = False,
     verbose: bool = False,
+    obs: bool = False,
+    obs_file_path: Optional[str] = None,
+    obs_size: int = 6,
+    obs_variable_name: str='var',
+    obs_edge_colour: str='grey',
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     average_by: Optional[str] = None,
 ) -> None:
@@ -322,6 +343,11 @@ def domain_map(
                     figsize=figsize,
                     ylim=ylim,
                     xlim=xlim,
+                    obs = obs,
+                    obs_file_path= obs_file_path,
+                    obs_size= obs_size,
+                    obs_variable_name=obs_variable_name,
+                    obs_edge_colour=obs_edge_colour,
                     shading=shading_eff,
                     verbose=verbose,
                     draw_mesh=grid_on,
@@ -337,6 +363,11 @@ def domain_map(
                     cbar_label=var,
                     fname=fname,
                     dpi=dpi,
+                    obs = obs,
+                    obs_file_path= obs_file_path,
+                    obs_size= obs_size,
+                    obs_variable_name=obs_variable_name,
+                    obs_edge_colour=obs_edge_colour,
                     figsize=figsize,
                     ylim=ylim,
                     xlim=xlim,
@@ -406,6 +437,11 @@ def region_map(
     verbose: bool = False,
     styles: Optional[Dict[str, Dict[str, Any]]] = None,
     average_by: Optional[str] = None,
+    obs: bool = False,
+    obs_file_path: Optional[str] = None,
+    obs_size: int = 6,
+    obs_variable_name: str='var',
+    obs_edge_colour: str='grey',
 ) -> None:
     """
     Region-masked maps for one or more variables at a chosen depth and time window.
@@ -683,6 +719,11 @@ def region_map(
                             shading=shading_eff,
                             verbose=verbose,
                             draw_mesh=grid_on,
+                            obs = obs,
+                            obs_file_path= obs_file_path,
+                            obs_size= obs_size,
+                            obs_variable_name=obs_variable_name,
+                            obs_edge_colour=obs_edge_colour
                         )
                     else:
                         _plot_tripcolor_full(
@@ -701,6 +742,11 @@ def region_map(
                             shading=shading_eff,
                             verbose=verbose,
                             draw_mesh=grid_on,
+                            obs = obs,
+                            obs_file_path= obs_file_path,
+                            obs_size= obs_size,
+                            obs_variable_name=obs_variable_name,
+                            obs_edge_colour=obs_edge_colour
                         )
             else:
                 m = da.mean("time", skipna=True) if "time" in da.dims else da
@@ -732,6 +778,11 @@ def region_map(
                         shading=shading_eff,
                         verbose=verbose,
                         draw_mesh=grid_on,
+                        obs = obs,
+                        obs_file_path= obs_file_path,
+                        obs_size= obs_size,
+                        obs_variable_name=obs_variable_name,
+                        obs_edge_colour=obs_edge_colour
                     )
                 else:
                     _plot_tripcolor_full(
@@ -750,4 +801,9 @@ def region_map(
                         shading=shading_eff,
                         verbose=verbose,
                         draw_mesh=grid_on,
+                        obs = obs,
+                        obs_file_path= obs_file_path,
+                        obs_size= obs_size,
+                        obs_variable_name=obs_variable_name,
+                        obs_edge_colour=obs_edge_colour
                     )
