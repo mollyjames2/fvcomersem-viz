@@ -293,6 +293,12 @@ def station_timeseries(
     verbose: bool = True,
     combine_by: Optional[str] = None,  # None | "var" | "station"
     average_by: Optional[str] = None,
+    obs: bool = False,
+    obs_file_path: Optional[str] = None,
+    obs_var_column_name: Optional[int] = None,
+    obs_data_column_name: Optional[int] = None,
+    obs_dict: Optional[dict] = None,
+    obs_size: Optional[int]= 6,
 ) -> None:
     """
     Plot station time series by sampling the nearest grid column at each station
@@ -487,6 +493,17 @@ def station_timeseries(
             ax.set_xlabel("Time", fontsize=fontsize)
             ax.set_ylabel(var,fontsize=fontsize)
             ax.tick_params(axis='both', labelsize=fontsize)
+            if obs:
+                try:
+                    obs_file=obs_file_path.format(name)
+                    obs_data=pd.read_csv(obs_file)
+                    obs_df=obs_data[obs_data[obs_var_column_name]==obs_dict[var]]
+                    #obs_date =  obs_df['date']
+                    obs_df['date']=pd.to_datetime(obs_df['SAMPLING_DATE'])
+                    ax.plot(obs_df['date'], obs_df[obs_data_column_name],'ko', markersize=obs_size)
+                    ax.set_xlim(t.min(), t.max())
+                except:
+                    print (f'plotting observations did not work for {var}')
             if ylim is not None:
                 try:
                     ax.set_ylim(ylim[var])

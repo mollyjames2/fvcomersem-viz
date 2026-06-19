@@ -429,6 +429,7 @@ def plot_bars(
     figures_root: str = ".",
     verbose: bool = False,
     average_by: Optional[str] = None,
+    ylim: Optional[Dict[tuple[float,float]]] = None,
 ) -> None:
     """Create bar-chart summaries with uncertainty.
 
@@ -544,6 +545,7 @@ def plot_bars(
             figsize=figsize,
             ncols=ncols,
             title=title,
+            ylim=ylim,
             ylabel=ylabel,
             base_dir=base_dir,
             figures_root=figures_root,
@@ -960,6 +962,11 @@ def plot_bars(
             ax.errorbar(x_pos, y, yerr=e, fmt="none", capsize=3, color="black")
             ax.set_xticks(x_pos)
             ax.set_xticklabels(x_levels, rotation=45, ha="right")
+            if ylim is not None:
+                try:
+                   ax.set_ylim(ylim[var])
+                except:
+                   pass
 
         else:
             n_h = len([h for h in hue_levels if h != "_"])
@@ -990,6 +997,11 @@ def plot_bars(
             ax.set_xticks(x_pos)
             ax.set_xticklabels(x_levels, rotation=45, ha="right")
             ax.legend(fontsize=9)
+            if ylim is not None:
+                try:
+                   ax.set_ylim(ylim[var])
+                except:
+                   pass
 
         # facet title
         if facet_by is None:
