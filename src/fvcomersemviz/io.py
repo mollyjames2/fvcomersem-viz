@@ -483,7 +483,7 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
             decode_times=False,  # we coerce below
             engine=engine,  # 'netcdf4' (C lib), 'h5netcdf' (HDF5), 'scipy' (netCDF3)
             chunks={"time": 168},  # dask-friendly weekly-ish chunks
-            parallel=False,  # parallel=True deadlocks with O(1000) files on threaded scheduler
+            parallel=True, #False,  # parallel=True deadlocks with O(1000) files on threaded scheduler
             preprocess=_preprocess_one,
             data_vars="minimal",
             coords="minimal",
@@ -493,7 +493,7 @@ def load_from_base(base_dir: str, file_pattern: str) -> xr.Dataset:
         )
 
     # Prefer 'netcdf4' for NetCDF4/HDF5 files (FVCOM output); scipy is NetCDF3 only
-    for engine in ("netcdf4", "h5netcdf", "scipy"):
+    for engine in ("scipy","netcdf4", "h5netcdf"):
         try:
             ds = _open(engine)
             print(f"[io] Using engine='{engine}'.")
